@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  trading-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-trading-bot
+    restart: unless-stopped
+    ports:
+      - "8888:8888"
+    environment:
+      # AI模型配置
+      - AI_MODEL=${AI_MODEL:-deepseek}
+      - USE_RELAY_API=${USE_RELAY_API:-true}
+      - RELAY_API_BASE_URL=${RELAY_API_BASE_URL}
+      - RELAY_API_KEY=${RELAY_API_KEY}
+
+      # DeepSeek API (如果直连)
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}
+
+      # Grok API (可选)
+      - GROK_API_KEY=${GROK_API_KEY}
+
+      # Claude API (可选)
+      - CLAUDE_API_KEY=${CLAUDE_API_KEY}
+
+      # 交易所配置
+      - EXCHANGE_TYPE=${EXCHANGE_TYPE:-okx}
+
+      # OKX API
+      - OKX_API_KEY=${OKX_API_KEY}
+      - OKX_SECRET=${OKX_SECRET}
+      - OKX_PASSWORD=${OKX_PASSWORD}
+
+      # Binance API (如果使用Binance)
+      - BINANCE_API_KEY=${BINANCE_API_KEY}
+      - BINANCE_SECRET=${BINANCE_SECRET}
+
+      # 代理配置 (如果需要)
+      - HTTP_PROXY=${HTTP_PROXY:-}
+      - HTTPS_PROXY=${HTTPS_PROXY:-}
+
+    volumes:
+      # 持久化日志和数据
+      - ./logs:/app/logs
+      - ./data:/app/data
+
+    # 资源限制（防止资源耗尽）
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+    # 健康检查
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8888/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # 日志配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # 网络配置
+    networks:
+      - trading-network
+
+networks:
+  trading-network:
+    driver: bridge

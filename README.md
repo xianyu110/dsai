@@ -30,11 +30,38 @@ RELAY_API_BASE_URL=https://apipro.maynor1024.live/v1
 RELAY_API_KEY=你的密钥
 ```
 
-### 运行
+### 快速启动
 
+**🐳 生产部署 (Docker + VPS) - 推荐**
 ```bash
+# 一键部署
+./deploy.sh
+
+# 查看日志
+docker-compose logs -f
+
+# 更新升级
+./update.sh
+```
+📖 详细部署文档: [README_DEPLOY.md](./README_DEPLOY.md)
+
+**💻 本地开发**
+
+方式一: 使用启动脚本
+```bash
+./start.sh
+```
+
+方式二: 直接运行
+```bash
+# Web界面 (带热重载)
+python3 web_ui.py
+
+# 命令行机器人
 python3 deepseek.py
 ```
+
+访问Web界面: http://localhost:8888
 
 ## ⚠️ 风险提示
 

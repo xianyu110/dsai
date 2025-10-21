@@ -1,38 +1,42 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI交易机器人控制台</title>
+    <title>🤖 AI交易机器人控制台</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🤖</text></svg>">
     <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
+        <span class="theme-icon">🌙</span>
+    </button>
+
     <div class="container">
         <header>
-            <h1>🤖 AI交易机器人控制台</h1>
+            <div class="header-top">
+                <h1>🤖 AI交易机器人控制台</h1>
+                <div class="header-actions">
+                    <span class="connection-status">
+                        <span class="pulse"></span>
+                        已连接
+                    </span>
+                </div>
+            </div>
             <div class="status-bar" id="statusBar">
                 <span>余额: <strong id="balance">-</strong> USDT</span>
                 <span>总盈亏: <strong id="totalPnl" class="pnl">-</strong> USDT</span>
+                <span>
+                    自动交易:
+                    <strong id="autoTradeStatus" class="status-badge">-</strong>
+                    <button class="toggle-btn" id="autoTradeToggle" onclick="toggleAutoTrade()">
+                        <span id="autoTradeToggleText">启用</span>
+                    </button>
+                </span>
                 <span>更新: <span id="updateTime">-</span></span>
             </div>
         </header>
-
-        <div class="positions-container">
-            <section class="positions-section">
-                <h2>📊 合约持仓</h2>
-                <div id="positionsGrid" class="grid"></div>
-            </section>
-
-            <section class="spot-section">
-                <h2>💰 现货余额</h2>
-                <div id="spotGrid" class="grid"></div>
-            </section>
-        </div>
-
-        <section class="trading-section">
-            <h2>💹 实时行情</h2>
-            <div id="marketsGrid" class="grid"></div>
-        </section>
 
         <section class="controls-section">
             <h2>🎮 手动操作</h2>
@@ -46,7 +50,19 @@
                         <option value="DOGE/USDT">DOGE/USDT</option>
                         <option value="BNB/USDT">BNB/USDT</option>
                     </select>
-                    <input type="number" id="tradeAmount" placeholder="金额(USDT)" value="20">
+                    <div class="input-group">
+                        <input type="number" id="tradeAmount" placeholder="输入金额" value="20" min="1" step="1">
+                        <span class="input-suffix">USDT</span>
+                    </div>
+                    <select id="tradeLeverage">
+                        <option value="3">3倍杠杆 (保守)</option>
+                        <option value="5" selected>5倍杠杆 (平衡)</option>
+                        <option value="10">10倍杠杆 (激进)</option>
+                        <option value="20">20倍杠杆 (极限)</option>
+                    </select>
+                    <div class="trade-info" id="tradeInfo">
+                        预计开仓: <span id="estimatedContracts">-</span> 张
+                    </div>
                     <button onclick="executeTrade('buy')" class="btn btn-long">开多</button>
                     <button onclick="executeTrade('sell')" class="btn btn-short">开空</button>
                     <button onclick="executeTrade('close')" class="btn btn-close">平仓</button>
@@ -70,10 +86,74 @@
             </div>
         </section>
 
-        <section class="logs-section">
-            <h2>📝 AI分析记录</h2>
-            <div id="logsContainer"></div>
+        <section class="trade-logs-section">
+            <div class="section-header">
+                <h2>📋 交易操作日志</h2>
+                <button class="action-btn" onclick="refreshTradeLogs()">
+                    🔄 刷新
+                </button>
+            </div>
+            <div class="trade-logs-container" id="tradeLogsContainer">
+                <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                    暂无操作日志
+                </div>
+            </div>
         </section>
+
+        <section class="unified-trading-section">
+            <div class="section-header">
+                <h2>📋 合约持仓</h2>
+                <div class="section-actions">
+                    <button class="action-btn" onclick="refreshOrders()">
+                        🔄 刷新
+                    </button>
+                    <button class="action-btn-subtle danger" onclick="closeAllPositions()">
+                        ⚠️ 一键平仓
+                    </button>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table class="orders-table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="selectAll" onclick="toggleSelectAll()"></th>
+                            <th>🆔 ID</th>
+                            <th>📊 合约品种</th>
+                            <th>🎯 方向</th>
+                            <th>📏 数量</th>
+                            <th>💵 开仓价</th>
+                            <th>💰 当前价</th>
+                            <th>💎 保证金</th>
+                            <th>⚡ 强平价</th>
+                            <th>📈 盈亏(USDT)</th>
+                            <th>📊 24h涨跌</th>
+                            <th>📍 状态</th>
+                            <th>⚠️ 平仓</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ordersTableBody">
+                        <tr>
+                            <td colspan="13" style="text-align: center; padding: 40px; color: #94a3b8;">
+                                暂无持仓数据
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <div class="positions-container">
+            <section class="spot-section">
+                <div class="section-header">
+                    <h2>💰 现货余额</h2>
+                    <button class="collapse-btn" onclick="toggleSpotBalance()">
+                        <span id="spotToggleIcon">▼</span>
+                    </button>
+                </div>
+                <div id="spotGrid" class="grid"></div>
+            </section>
+        </div>
     </div>
 
     <script src="/static/js/app.js"></script>

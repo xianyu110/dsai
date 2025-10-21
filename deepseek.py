@@ -116,8 +116,21 @@ def setup_exchange():
     try:
         # 为每个交易对设置杠杆
         for symbol in TRADE_CONFIG['symbols']:
-            exchange.set_leverage(TRADE_CONFIG['leverage'], symbol)
-            print(f"{symbol} 设置杠杆: {TRADE_CONFIG['leverage']}x")
+            try:
+                # OKX合约需要使用 BTC/USDT:USDT 格式
+                trade_symbol = symbol
+                if EXCHANGE_TYPE == 'okx' and ':' not in symbol:
+                    trade_symbol = f"{symbol}:USDT"
+
+                if EXCHANGE_TYPE == 'okx':
+                    # OKX需要为多空两个方向分别设置杠杆
+                    exchange.set_leverage(TRADE_CONFIG['leverage'], trade_symbol, params={'mgnMode': 'isolated', 'posSide': 'long'})
+                    exchange.set_leverage(TRADE_CONFIG['leverage'], trade_symbol, params={'mgnMode': 'isolated', 'posSide': 'short'})
+                else:
+                    exchange.set_leverage(TRADE_CONFIG['leverage'], trade_symbol)
+                print(f"{symbol} 设置杠杆: {TRADE_CONFIG['leverage']}x")
+            except Exception as e:
+                print(f"{symbol} 设置杠杆失败: {e} (可能已设置)")
 
         # 获取余额
         balance = exchange.fetch_balance()
@@ -133,8 +146,13 @@ def setup_exchange():
 def get_ohlcv(symbol):
     """获取指定币种的K线数据"""
     try:
+        # OKX合约需要使用 BTC/USDT:USDT 格式
+        trade_symbol = symbol
+        if EXCHANGE_TYPE == 'okx' and ':' not in symbol:
+            trade_symbol = f"{symbol}:USDT"
+
         # 获取最近10根K线
-        ohlcv = exchange.fetch_ohlcv(symbol, TRADE_CONFIG['timeframe'], limit=10)
+        ohlcv = exchange.fetch_ohlcv(trade_symbol, TRADE_CONFIG['timeframe'], limit=10)
 
         # 转换为DataFrame
         df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
@@ -144,7 +162,7 @@ def get_ohlcv(symbol):
         previous_data = df.iloc[-2] if len(df) > 1 else current_data
 
         return {
-            'symbol': symbol,
+            'symbol': symbol,  # 返回原始symbol格式
             'price': current_data['close'],
             'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
             'high': current_data['high'],
@@ -156,6 +174,8 @@ def get_ohlcv(symbol):
         }
     except Exception as e:
         print(f"{symbol} 获取K线数据失败: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -165,29 +185,22 @@ def get_current_position(symbol):
         # 获取所有持仓(不指定symbol以避免OKX的查询问题)
         all_positions = exchange.fetch_positions()
 
-        # 标准化符号 - 合约交易符号格式
-        if EXCHANGE_TYPE == 'okx':
-            # OKX永续合约格式：BTC-USDT-SWAP
-            target_symbol = symbol.replace('/', '-')
-        else:  # binance
-            # Binance永续合约格式：BTCUSDT
-            target_symbol = symbol.replace('/', '')
-
         result_positions = []
 
         for pos in all_positions:
-            # 匹配符号 (OKX可能返回完整的 -SWAP 后缀)
+            # 匹配符号
             pos_symbol = pos['symbol']
-            if EXCHANGE_TYPE == 'okx':
-                # 处理OKX的不同符号格式
-                if target_symbol in pos_symbol:
-                    # 找到匹配的合约
-                    pass
-                else:
-                    continue
-            else:  # binance
-                if pos_symbol != target_symbol:
-                    continue
+
+            # OKX格式: BNB/USDT:USDT 或 BTC/USDT:USDT
+            # Binance格式: BNBUSDT 或 BTCUSDT
+            # 我们的symbol格式: BNB/USDT 或 BTC/USDT
+
+            # 提取基础交易对部分 (去掉:USDT后缀)
+            base_symbol = pos_symbol.split(':')[0]  # BNB/USDT:USDT -> BNB/USDT
+
+            # 检查是否匹配
+            if base_symbol != symbol:
+                continue
 
             contracts = float(pos.get('contracts', 0))
 
@@ -199,13 +212,51 @@ def get_current_position(symbol):
                 else:  # binance
                     side = pos.get('side', 'long')  # binance直接返回side
 
+                # 获取OKX的额外信息
+                info = pos.get('info', {})
+
+                # 获取保证金 (OKX返回的可能是币本位，需要转换)
+                # 安全转换浮点数，处理空字符串
+                def safe_float(value, default=0):
+                    try:
+                        return float(value) if value else default
+                    except (ValueError, TypeError):
+                        return default
+
+                margin_value = safe_float(info.get('margin', 0))
+                imr = safe_float(info.get('imr', 0))  # 初始保证金
+                notional_usd = safe_float(info.get('notionalUsd', 0))  # USDT计价的名义价值
+                leverage = safe_float(info.get('lever', 1), 1)
+
+                # 调试日志
+                print(f"[DEBUG] {symbol} 保证金数据:")
+                print(f"  margin (原始): {margin_value}")
+                print(f"  imr: {imr}")
+                print(f"  notionalUsd: {notional_usd}")
+                print(f"  lever: {leverage}")
+
+                # 优先使用notionalUsd计算保证金
+                if notional_usd > 0 and leverage > 0:
+                    calculated_margin = notional_usd / leverage
+                    print(f"  计算方式: notionalUsd / lever = {calculated_margin}")
+                elif imr > 0:
+                    calculated_margin = imr
+                    print(f"  计算方式: 使用imr = {calculated_margin}")
+                else:
+                    calculated_margin = margin_value
+                    print(f"  计算方式: 使用原始margin = {calculated_margin}")
+
                 position_data = {
                     'symbol': symbol,
                     'side': side,
                     'size': contracts,
                     'entry_price': float(pos.get('entryPrice', 0)),
                     'unrealized_pnl': float(pos.get('unrealizedPnl', 0)),
-                    'leverage': float(pos.get('info', {}).get('lever', 1)),
+                    'leverage': leverage,
+                    'margin': calculated_margin,  # 计算后的USDT保证金
+                    'liquidation_price': float(pos.get('liquidationPrice', 0) or 0),  # 强平价
+                    'margin_ratio': float(info.get('mgnRatio', 0)),  # 保证金率
+                    'notional': notional_usd,  # USDT计价的名义价值
                 }
                 result_positions.append(position_data)
 
@@ -219,6 +270,8 @@ def get_current_position(symbol):
 
     except Exception as e:
         print(f"{symbol} 获取持仓失败: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
 
@@ -355,6 +408,11 @@ def execute_trade(signal_data, price_data):
     """执行交易 - 参考AlphaArena持仓逻辑"""
     symbol = price_data['symbol']
 
+    # OKX合约需要使用 BTC/USDT:USDT 格式
+    trade_symbol = symbol
+    if EXCHANGE_TYPE == 'okx' and ':' not in symbol:
+        trade_symbol = f"{symbol}:USDT"
+
     current_position = get_current_position(symbol)
 
     print(f"\n{'='*60}")
@@ -404,12 +462,33 @@ def execute_trade(signal_data, price_data):
                 print(f"🔴 平仓 {symbol} {pos['side']}仓")
                 if not TRADE_CONFIG['test_mode']:
                     try:
-                        # 合约平仓：使用reduceOnly参数确保只平仓不开新仓
-                        if pos['side'] == 'long':
-                            exchange.create_market_order(symbol, 'sell', pos['size'], None, {'reduceOnly': True})
-                        else:
-                            exchange.create_market_order(symbol, 'buy', pos['size'], None, {'reduceOnly': True})
-                        print("✅ 平仓成功")
+                        # OKX合约平仓：双向持仓模式
+                        if EXCHANGE_TYPE == 'okx':
+                            # OKX双向持仓模式：平仓方向与持仓方向相反
+                            # 平多仓(long)：卖出(sell)，平空仓(short)：买入(buy)
+                            side = 'sell' if pos['side'] == 'long' else 'buy'
+
+                            # 转换交易对格式：BNB/USDT -> BNB-USDT-SWAP
+                            base_symbol = symbol.replace('/USDT', '')
+                            okx_inst_id = f'{base_symbol}-USDT-SWAP'
+
+                            # 使用OKX原生API平仓
+                            result = exchange.private_post_trade_order({
+                                'instId': okx_inst_id,
+                                'tdMode': 'isolated',
+                                'side': side,
+                                'posSide': pos['side'],
+                                'ordType': 'market',
+                                'sz': str(pos['size'])
+                            })
+                            print("✅ 平仓成功")
+                        else:  # Binance合约平仓
+                            params = {'reduceOnly': True}
+                            if pos['side'] == 'long':
+                                exchange.create_market_order(trade_symbol, 'sell', pos['size'], params)
+                            else:
+                                exchange.create_market_order(trade_symbol, 'buy', pos['size'], params)
+                            print("✅ 平仓成功")
                     except Exception as e:
                         print(f"❌ 平仓失败: {e}")
             else:
@@ -419,19 +498,69 @@ def execute_trade(signal_data, price_data):
     # 无持仓时根据信号开仓
     if not current_position and signal_data['signal'] != 'HOLD':
         current_price = price_data['price']
-        amount = TRADE_CONFIG['amount_usd'] / current_price  # 根据USDT金额计算数量
 
         if TRADE_CONFIG['test_mode']:
-            print(f"测试模式 - 模拟开仓: {signal_data['signal']} {amount:.6f} {symbol}")
+            print(f"测试模式 - 模拟开仓: {signal_data['signal']} {symbol}")
             return
 
         try:
+            # 根据AI信心度动态调整杠杆
+            confidence = signal_data.get('confidence', 'MEDIUM').upper()
+            if confidence == 'HIGH':
+                leverage = 10  # 高信心 10倍
+            elif confidence == 'MEDIUM':
+                leverage = 5   # 中等信心 5倍
+            else:  # LOW
+                leverage = 3   # 低信心 3倍
+
+            print(f"📊 AI信心度: {confidence} -> 杠杆: {leverage}x")
+
+            # 设置杠杆
+            try:
+                if EXCHANGE_TYPE == 'okx':
+                    pos_side = 'long' if signal_data['signal'] == 'BUY' else 'short'
+                    exchange.set_leverage(leverage, trade_symbol, params={'mgnMode': 'isolated', 'posSide': pos_side})
+                else:
+                    exchange.set_leverage(leverage, trade_symbol)
+                print(f"✅ 杠杆设置成功: {leverage}x")
+            except Exception as e:
+                print(f"⚠️ 设置杠杆警告: {e} (可能已设置)")
+
+            # 计算合约张数
+            if EXCHANGE_TYPE == 'okx':
+                # 加载市场信息获取合约面值
+                exchange.load_markets()
+                market = exchange.market(trade_symbol)
+                contract_size = market.get('contractSize', 1)  # 每张合约的币数
+
+                # 使用杠杆计算购买力
+                buying_power = TRADE_CONFIG['amount_usd'] * leverage  # 保证金 × 杠杆 = 购买力
+                coins_needed = buying_power / current_price  # 购买力 / 价格 = 币数
+                amount_contracts = coins_needed / contract_size  # 币数 / 合约面值 = 张数
+
+                print(f"开仓计算:")
+                print(f"  保证金: {TRADE_CONFIG['amount_usd']} USDT × {leverage}倍杠杆 = {buying_power} USDT购买力")
+                print(f"  币数: {buying_power} USDT / ${current_price} = {coins_needed:.6f}")
+                print(f"  合约张数: {coins_needed:.6f} / {contract_size} = {amount_contracts:.4f} 张")
+            else:  # Binance
+                buying_power = TRADE_CONFIG['amount_usd'] * leverage
+                amount_contracts = buying_power / current_price
+
+            # 准备交易参数
+            params = {}
+            if EXCHANGE_TYPE == 'okx':
+                params = {'tdMode': 'isolated'}  # 逐仓模式
+
             if signal_data['signal'] == 'BUY':
-                print(f"🟢 开多仓: {amount:.6f} {symbol}")
-                exchange.create_market_order(symbol, 'buy', amount)
+                print(f"🟢 开多仓: {amount_contracts:.6f} 张 {symbol} (杠杆: {leverage}x)")
+                if EXCHANGE_TYPE == 'okx':
+                    params['posSide'] = 'long'
+                exchange.create_market_order(trade_symbol, 'buy', amount_contracts, params)
             elif signal_data['signal'] == 'SELL':
-                print(f"🔴 开空仓: {amount:.6f} {symbol}")
-                exchange.create_market_order(symbol, 'sell', amount)
+                print(f"🔴 开空仓: {amount_contracts:.6f} 张 {symbol} (杠杆: {leverage}x)")
+                if EXCHANGE_TYPE == 'okx':
+                    params['posSide'] = 'short'
+                exchange.create_market_order(trade_symbol, 'sell', amount_contracts, params)
             print("✅ 开仓成功")
             time.sleep(2)
         except Exception as e:
