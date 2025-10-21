@@ -17,10 +17,17 @@
             </div>
         </header>
 
-        <section class="positions-section">
-            <h2>📊 当前持仓</h2>
-            <div id="positionsGrid" class="grid"></div>
-        </section>
+        <div class="positions-container">
+            <section class="positions-section">
+                <h2>📊 合约持仓</h2>
+                <div id="positionsGrid" class="grid"></div>
+            </section>
+
+            <section class="spot-section">
+                <h2>💰 现货余额</h2>
+                <div id="spotGrid" class="grid"></div>
+            </section>
+        </div>
 
         <section class="trading-section">
             <h2>💹 实时行情</h2>
@@ -29,18 +36,37 @@
 
         <section class="controls-section">
             <h2>🎮 手动操作</h2>
-            <div class="manual-trade">
-                <select id="tradeSymbol">
-                    <option value="BTC/USDT">BTC/USDT</option>
-                    <option value="ETH/USDT">ETH/USDT</option>
-                    <option value="SOL/USDT">SOL/USDT</option>
-                    <option value="DOGE/USDT">DOGE/USDT</option>
-                    <option value="BNB/USDT">BNB/USDT</option>
-                </select>
-                <input type="number" id="tradeAmount" placeholder="金额(USDT)" value="20">
-                <button onclick="executeTrade('buy')" class="btn btn-long">开多</button>
-                <button onclick="executeTrade('sell')" class="btn btn-short">开空</button>
-                <button onclick="executeTrade('close')" class="btn btn-close">平仓</button>
+            <div class="manual-controls">
+                <div class="manual-trade">
+                    <h3>交易操作</h3>
+                    <select id="tradeSymbol">
+                        <option value="BTC/USDT">BTC/USDT</option>
+                        <option value="ETH/USDT">ETH/USDT</option>
+                        <option value="SOL/USDT">SOL/USDT</option>
+                        <option value="DOGE/USDT">DOGE/USDT</option>
+                        <option value="BNB/USDT">BNB/USDT</option>
+                    </select>
+                    <input type="number" id="tradeAmount" placeholder="金额(USDT)" value="20">
+                    <button onclick="executeTrade('buy')" class="btn btn-long">开多</button>
+                    <button onclick="executeTrade('sell')" class="btn btn-short">开空</button>
+                    <button onclick="executeTrade('close')" class="btn btn-close">平仓</button>
+                </div>
+                <div class="manual-analysis">
+                    <h3>AI分析</h3>
+                    <select id="analysisSymbol">
+                        <option value="BTC/USDT">BTC/USDT</option>
+                        <option value="ETH/USDT">ETH/USDT</option>
+                        <option value="SOL/USDT">SOL/USDT</option>
+                        <option value="DOGE/USDT">DOGE/USDT</option>
+                        <option value="BNB/USDT">BNB/USDT</option>
+                    </select>
+                    <button onclick="triggerAnalysis()" class="btn btn-analysis" id="analysisBtn">
+                        🧠 触发AI分析
+                    </button>
+                    <button onclick="triggerAllAnalysis()" class="btn btn-all-analysis">
+                        🔄 分析所有币种
+                    </button>
+                </div>
             </div>
         </section>
 

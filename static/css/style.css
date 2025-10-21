@@ -53,6 +53,19 @@ section {
     margin-bottom: 20px;
 }
 
+.positions-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+    .positions-container {
+        grid-template-columns: 1fr;
+    }
+}
+
 .grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -64,6 +77,24 @@ section {
     padding: 20px;
     border-radius: 8px;
     border-left: 4px solid #60a5fa;
+}
+
+/* 数字更新动画 */
+.price-value, .change-value, .high-value, .low-value,
+.size-value, .entry-value, .pnl-value,
+.signal-value, .confidence-value, .reason-value,
+.stop-loss-value, .take-profit-value {
+    transition: all 0.3s ease;
+}
+
+/* 数字变化时的高亮效果 */
+@keyframes highlight {
+    0% { background-color: rgba(96, 165, 250, 0.3); }
+    100% { background-color: transparent; }
+}
+
+.value-changed {
+    animation: highlight 0.5s ease;
 }
 
 .card h3 {
@@ -91,20 +122,63 @@ section {
     color: #ef4444;
 }
 
+h3 {
+    font-size: 16px;
+    margin-bottom: 15px;
+    color: #10b981;
+}
+
+.manual-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.manual-trade, .manual-analysis {
+    background: #334155;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #10b981;
+}
+
+.manual-trade {
+    border-left-color: #60a5fa;
+}
+
+.manual-analysis {
+    border-left-color: #a855f7;
+}
+
+.manual-trade select,
+.manual-trade input,
+.manual-analysis select {
+    padding: 10px 15px;
+    background: #1e293b;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 14px;
+    margin-bottom: 10px;
+}
+
+.manual-trade select,
+.manual-trade input {
+    margin-right: 10px;
+}
+
 .manual-trade {
     display: flex;
     gap: 10px;
     flex-wrap: wrap;
 }
 
-.manual-trade select,
-.manual-trade input {
-    padding: 10px 15px;
-    background: #334155;
-    border: 1px solid #475569;
-    border-radius: 6px;
-    color: #e2e8f0;
-    font-size: 14px;
+.manual-analysis {
+    display: flex;
+    flex-direction: column;
+}
+
+.manual-analysis select {
+    width: 100%;
 }
 
 .btn {
@@ -136,11 +210,83 @@ section {
     color: white;
 }
 
+.btn-analysis {
+    background: #a855f7;
+    color: white;
+    margin-right: 10px;
+    margin-bottom: 5px;
+}
+
+.btn-all-analysis {
+    background: #6366f1;
+    color: white;
+    margin-bottom: 5px;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 #logsContainer {
-    max-height: 400px;
+    max-height: 600px;
     overflow-y: auto;
     font-size: 13px;
-    font-family: 'Courier New', monospace;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.log-card {
+    background: #334155;
+    padding: 15px;
+    border-radius: 8px;
+    border-left: 4px solid #60a5fa;
+}
+
+.log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #475569;
+}
+
+.log-header h4 {
+    font-size: 16px;
+    color: #60a5fa;
+    margin: 0;
+}
+
+.log-time {
+    font-size: 12px;
+    color: #94a3b8;
+}
+
+.log-content {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.log-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    font-size: 13px;
+}
+
+.log-row > span:first-child {
+    color: #94a3b8;
+    min-width: 60px;
+}
+
+.log-reason {
+    flex: 1;
+    text-align: right;
+    color: #e2e8f0;
+    line-height: 1.5;
 }
 
 .log-entry {

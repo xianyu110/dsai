@@ -7,7 +7,7 @@ load_dotenv()
 
 # 测试中转 API
 api_key = os.getenv('RELAY_API_KEY')
-base_url = os.getenv('RELAY_API_BASE_URL', 'https://for.shuo.bar/v1')
+base_url = os.getenv('RELAY_API_BASE_URL', 'https://apipro.maynor1024.live/v1')
 
 # 配置代理
 proxies = {}

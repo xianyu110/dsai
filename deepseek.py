@@ -1,4 +1,6 @@
+# -*- coding: utf-8 -*-
 import os
+import sys
 import time
 import schedule
 from openai import OpenAI
@@ -8,6 +10,12 @@ from datetime import datetime
 import json
 from dotenv import load_dotenv
 
+# 设置控制台输出编码为UTF-8
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
+
 load_dotenv()
 
 # 选择 AI 模型
@@ -15,7 +23,7 @@ AI_MODEL = os.getenv('AI_MODEL', 'deepseek').lower()
 USE_RELAY_API = os.getenv('USE_RELAY_API', 'true').lower() == 'true'
 
 if USE_RELAY_API:
-    API_BASE_URL = os.getenv('RELAY_API_BASE_URL', 'https://for.shuo.bar/v1')
+    API_BASE_URL = os.getenv('RELAY_API_BASE_URL', 'https://apipro.maynor1024.live/v1')
     API_KEY = os.getenv('RELAY_API_KEY')
 else:
     API_BASE_URL = None
@@ -31,17 +39,9 @@ else:
 
 # 初始化 AI 客户端 (统一使用中转API)
 from openai import OpenAI
-import httpx
 
-# 配置代理用于 AI API
-ai_proxies = {}
-if os.getenv('HTTP_PROXY'):
-    ai_proxies = {
-        'http://': os.getenv('HTTP_PROXY'),
-        'https://': os.getenv('HTTPS_PROXY', os.getenv('HTTP_PROXY')),
-    }
-
-http_client = httpx.Client(proxies=ai_proxies) if ai_proxies else None
+# AI客户端不需要单独配置代理，会自动使用系统环境变量
+http_client = None
 
 if AI_MODEL == 'grok':
     ai_client = OpenAI(
@@ -101,6 +101,7 @@ TRADE_CONFIG = {
     'leverage': 10,  # 10倍杠杆
     'timeframe': '15m',  # 15分钟K线
     'test_mode': False,  # 🔴 实盘模式
+    'auto_trade': False,  # ⚠️ 仅分析不自动交易
     'hold_threshold': 0.95,  # 只要价格高于入场价95%就持有
 }
 
@@ -164,32 +165,49 @@ def get_current_position(symbol):
         # 获取所有持仓(不指定symbol以避免OKX的查询问题)
         all_positions = exchange.fetch_positions()
 
-        # 标准化符号
+        # 标准化符号 - 合约交易符号格式
         if EXCHANGE_TYPE == 'okx':
-            target_symbol = symbol.replace('/', '/') + ':USDT'
+            # OKX永续合约格式：BTC-USDT-SWAP
+            target_symbol = symbol.replace('/', '-')
         else:  # binance
-            target_symbol = symbol + ':USDT'
+            # Binance永续合约格式：BTCUSDT
+            target_symbol = symbol.replace('/', '')
 
         result_positions = []
 
         for pos in all_positions:
-            if pos['symbol'] == target_symbol:
-                contracts = float(pos.get('contracts', 0))
+            # 匹配符号 (OKX可能返回完整的 -SWAP 后缀)
+            pos_symbol = pos['symbol']
+            if EXCHANGE_TYPE == 'okx':
+                # 处理OKX的不同符号格式
+                if target_symbol in pos_symbol:
+                    # 找到匹配的合约
+                    pass
+                else:
+                    continue
+            else:  # binance
+                if pos_symbol != target_symbol:
+                    continue
 
-                if contracts > 0:  # 有持仓
-                    # OKX使用info.posSide区分多空
-                    pos_side = pos.get('info', {}).get('posSide', '')
-                    side = 'long' if pos_side == 'long' else 'short'
+            contracts = float(pos.get('contracts', 0))
 
-                    position_data = {
-                        'symbol': symbol,
-                        'side': side,
-                        'size': contracts,
-                        'entry_price': float(pos.get('entryPrice', 0)),
-                        'unrealized_pnl': float(pos.get('unrealizedPnl', 0)),
-                        'leverage': float(pos.get('info', {}).get('lever', 0)),
-                    }
-                    result_positions.append(position_data)
+            if contracts > 0:  # 有持仓
+                # OKX使用info.posSide区分多空
+                pos_side = pos.get('info', {}).get('posSide', '')
+                if EXCHANGE_TYPE == 'okx':
+                    side = 'long' if pos_side == 'long' else ('short' if pos_side == 'short' else 'net')
+                else:  # binance
+                    side = pos.get('side', 'long')  # binance直接返回side
+
+                position_data = {
+                    'symbol': symbol,
+                    'side': side,
+                    'size': contracts,
+                    'entry_price': float(pos.get('entryPrice', 0)),
+                    'unrealized_pnl': float(pos.get('unrealizedPnl', 0)),
+                    'leverage': float(pos.get('info', {}).get('lever', 1)),
+                }
+                result_positions.append(position_data)
 
         # 如果有多个持仓,返回列表;如果只有一个,返回单个对象;如果没有,返回None
         if len(result_positions) == 0:
@@ -244,7 +262,13 @@ def analyze_with_ai(price_data):
 
     # 添加当前持仓信息
     current_pos = get_current_position(symbol)
-    position_text = "无持仓" if not current_pos else f"{current_pos['side']}仓, 数量: {current_pos['size']}, 盈亏: {current_pos['unrealized_pnl']:.2f}USDT"
+    if not current_pos:
+        position_text = "无持仓"
+    elif isinstance(current_pos, list):
+        # 如果有多个持仓,显示所有持仓
+        position_text = "; ".join([f"{pos['side']}仓 {pos['size']:.6f}, 盈亏: {pos['unrealized_pnl']:.2f}USDT" for pos in current_pos])
+    else:
+        position_text = f"{current_pos['side']}仓, 数量: {current_pos['size']}, 盈亏: {current_pos['unrealized_pnl']:.2f}USDT"
 
     # 添加情感化背景提示
     emotional_context = """
@@ -352,28 +376,45 @@ def execute_trade(signal_data, price_data):
 
     print(f"当前持仓: {current_position}")
 
+    # 如果禁用自动交易,只显示分析结果
+    if not TRADE_CONFIG.get('auto_trade', False):
+        print(f"⚠️ 自动交易已禁用,仅记录分析结果")
+        return
+
     # AlphaArena策略：持仓优先
     if current_position:
-        entry_price = current_position['entry_price']
-        current_price = price_data['price']
-        price_ratio = current_price / entry_price
+        # 处理多个持仓的情况
+        positions_to_check = [current_position] if not isinstance(current_position, list) else current_position
 
-        # 只有触发止损才平仓(价格低于入场价95%)
-        if price_ratio < TRADE_CONFIG['hold_threshold']:
-            print(f"⚠️ 触发止损条件! 价格比例: {price_ratio:.2%} < {TRADE_CONFIG['hold_threshold']:.2%}")
-            print(f"🔴 平仓 {symbol}")
-            if not TRADE_CONFIG['test_mode']:
-                try:
-                    if current_position['side'] == 'long':
-                        exchange.create_market_sell_order(symbol, current_position['size'])
-                    else:
-                        exchange.create_market_buy_order(symbol, current_position['size'])
-                    print("✅ 平仓成功")
-                except Exception as e:
-                    print(f"❌ 平仓失败: {e}")
-        else:
-            print(f"✅ 持有{current_position['side']}仓 (价格比例: {price_ratio:.2%}, 盈亏: {current_position['unrealized_pnl']:.2f} USDT)")
-            return
+        for pos in positions_to_check:
+            entry_price = pos['entry_price']
+            current_price = price_data['price']
+
+            # 根据多空方向计算价格比例
+            if pos['side'] == 'long':
+                price_ratio = current_price / entry_price
+                should_close = price_ratio < TRADE_CONFIG['hold_threshold']
+            else:  # short
+                price_ratio = entry_price / current_price
+                should_close = price_ratio < TRADE_CONFIG['hold_threshold']
+
+            # 只有触发止损才平仓
+            if should_close:
+                print(f"⚠️ {pos['side']}仓触发止损条件! 价格比例: {price_ratio:.2%} < {TRADE_CONFIG['hold_threshold']:.2%}")
+                print(f"🔴 平仓 {symbol} {pos['side']}仓")
+                if not TRADE_CONFIG['test_mode']:
+                    try:
+                        # 合约平仓：使用reduceOnly参数确保只平仓不开新仓
+                        if pos['side'] == 'long':
+                            exchange.create_market_order(symbol, 'sell', pos['size'], None, {'reduceOnly': True})
+                        else:
+                            exchange.create_market_order(symbol, 'buy', pos['size'], None, {'reduceOnly': True})
+                        print("✅ 平仓成功")
+                    except Exception as e:
+                        print(f"❌ 平仓失败: {e}")
+            else:
+                print(f"✅ 持有{pos['side']}仓 (价格比例: {price_ratio:.2%}, 盈亏: {pos['unrealized_pnl']:.2f} USDT)")
+        return
 
     # 无持仓时根据信号开仓
     if not current_position and signal_data['signal'] != 'HOLD':
@@ -387,10 +428,10 @@ def execute_trade(signal_data, price_data):
         try:
             if signal_data['signal'] == 'BUY':
                 print(f"🟢 开多仓: {amount:.6f} {symbol}")
-                exchange.create_market_buy_order(symbol, amount)
+                exchange.create_market_order(symbol, 'buy', amount)
             elif signal_data['signal'] == 'SELL':
                 print(f"🔴 开空仓: {amount:.6f} {symbol}")
-                exchange.create_market_sell_order(symbol, amount)
+                exchange.create_market_order(symbol, 'sell', amount)
             print("✅ 开仓成功")
             time.sleep(2)
         except Exception as e:
@@ -433,8 +474,14 @@ def trading_bot():
     for symbol in TRADE_CONFIG['symbols']:
         pos = get_current_position(symbol)
         if pos:
-            print(f"{symbol}: {pos['side']}仓 {pos['size']:.6f}, 盈亏: {pos['unrealized_pnl']:.2f} USDT")
-            total_pnl += pos['unrealized_pnl']
+            if isinstance(pos, list):
+                # 如果有多个持仓
+                for p in pos:
+                    print(f"{symbol}: {p['side']}仓 {p['size']:.6f}, 盈亏: {p['unrealized_pnl']:.2f} USDT")
+                    total_pnl += p['unrealized_pnl']
+            else:
+                print(f"{symbol}: {pos['side']}仓 {pos['size']:.6f}, 盈亏: {pos['unrealized_pnl']:.2f} USDT")
+                total_pnl += pos['unrealized_pnl']
         else:
             print(f"{symbol}: 无持仓")
     print(f"总盈亏: {total_pnl:.2f} USDT")
