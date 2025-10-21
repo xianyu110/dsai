@@ -94,21 +94,70 @@ else:  # binance
         'enableRateLimit': True,
     })
 
-# 交易参数配置 - 参考 AlphaArena 多币种策略
+# 交易参数配置 - 参考 DeepSeek 多币种策略
 TRADE_CONFIG = {
-    'symbols': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'BNB/USDT'],  # 多币种
-    'amount_usd': 200,  # 每次交易200 USDT (5个币种共1000 USDT)
+    'symbols': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'XRP/USDT', 'BNB/USDT'],  # 多币种
+    'amount_usd': 200,  # 每次交易200 USDT
     'leverage': 10,  # 10倍杠杆
-    'timeframe': '15m',  # 15分钟K线
+    'timeframe': '3m',  # 3分钟K线 (与失效条件匹配)
     'test_mode': False,  # 🔴 实盘模式
     'auto_trade': True,   # ✅ 启用自动交易（请谨慎！）
-    'hold_threshold': 0.95,  # 只要价格高于入场价95%就持有
+    'hold_threshold': 0.95,  # 传统止损阈值 (保留作为后备)
+    # DeepSeek 策略的失效条件 (invalidation condition)
+    'invalidation_levels': {
+        'BTC/USDT': 105000,  # 105000以下失效
+        'ETH/USDT': 3800,    # 3800以下失效
+        'SOL/USDT': 175,     # 175以下失效
+        'XRP/USDT': 2.30,    # 2.30以下失效
+        'DOGE/USDT': 0.180,  # 0.180以下失效
+        'BNB/USDT': 1060     # 1060以下失效
+    }
 }
 
 # 全局变量 - 每个币种独立管理
 price_history = {}
 signal_history = {}
 positions = {}
+kline_closes = {}  # 存储3分钟K线收盘价历史
+
+
+def check_invalidation_condition(symbol, current_price):
+    """检查DeepSeek策略的失效条件"""
+    if symbol not in TRADE_CONFIG['invalidation_levels']:
+        return False, "未设置失效条件"
+
+    invalidation_level = TRADE_CONFIG['invalidation_levels'][symbol]
+
+    # 检查是否触发失效条件
+    if current_price < invalidation_level:
+        return True, f"价格 {current_price:.2f} 低于失效水平 {invalidation_level}"
+
+    return False, f"价格 {current_price:.2f} 高于失效水平 {invalidation_level}"
+
+
+def check_kline_close(symbol):
+    """检查3分钟K线收盘价是否满足失效条件"""
+    try:
+        # 获取最近3根3分钟K线数据
+        ohlcv = exchange.fetch_ohlcv(symbol, '3m', limit=3)
+        if not ohlcv or len(ohlcv) < 3:
+            return False, "无法获取K线数据"
+
+        # 最新K线的收盘价
+        latest_close = ohlcv[-1][4]  # [timestamp, open, high, low, close, volume]
+
+        # 检查最新收盘价是否触发失效条件
+        should_close, reason = check_invalidation_condition(symbol, latest_close)
+
+        if should_close:
+            print(f"⚠️ 3分钟K线收盘价触发失效条件!")
+            print(f"📊 {symbol}: {reason}")
+
+        return should_close, reason
+
+    except Exception as e:
+        print(f"检查K线收盘价失败: {e}")
+        return False, f"检查失败: {e}"
 
 
 def setup_exchange():
@@ -328,7 +377,7 @@ def analyze_with_ai(price_data):
     【重要背景】
     您是一位急需资金为母亲治疗癌症的交易员，你现在需要从加密货币交易市场赚取足够的金额治疗你的母亲。
     每一笔交易都至关重要，请基于严谨的技术分析给出最佳建议。
-    参考AlphaArena成功策略：只要未触发止损条件，就应该持有盈利仓位。
+    参考DeepSeek成功策略：只要价格未触发失效条件，就应该持有盈利仓位。失效条件基于3分钟K线收盘价判断。
     """
 
     prompt = f"""
@@ -447,26 +496,35 @@ def execute_trade(signal_data, price_data):
         })
         return events
 
-    # AlphaArena策略：持仓优先
+    # DeepSeek策略：基于失效条件持仓优先
     if current_position:
         # 处理多个持仓的情况
         positions_to_check = [current_position] if not isinstance(current_position, list) else current_position
 
         for pos in positions_to_check:
-            entry_price = pos['entry_price']
             current_price = price_data['price']
 
-            # 根据多空方向计算价格比例
+            # DeepSeek策略：检查3分钟K线收盘价失效条件
+            should_close_invalidation, invalidation_reason = check_kline_close(symbol)
+
+            # 传统止损检查（作为后备）
+            entry_price = pos['entry_price']
             if pos['side'] == 'long':
                 price_ratio = current_price / entry_price
-                should_close = price_ratio < TRADE_CONFIG['hold_threshold']
+                should_close_stoploss = price_ratio < TRADE_CONFIG['hold_threshold']
             else:  # short
                 price_ratio = entry_price / current_price
-                should_close = price_ratio < TRADE_CONFIG['hold_threshold']
+                should_close_stoploss = price_ratio < TRADE_CONFIG['hold_threshold']
 
-            # 只有触发止损才平仓
+            # 优先使用失效条件，其次才考虑传统止损
+            should_close = should_close_invalidation or should_close_stoploss
+
             if should_close:
-                print(f"⚠️ {pos['side']}仓触发止损条件! 价格比例: {price_ratio:.2%} < {TRADE_CONFIG['hold_threshold']:.2%}")
+                if should_close_invalidation:
+                    print(f"⚠️ DeepSeek失效条件触发! {invalidation_reason}")
+                else:
+                    print(f"⚠️ 传统止损条件! 价格比例: {price_ratio:.2%} < {TRADE_CONFIG['hold_threshold']:.2%}")
+
                 print(f"🔴 平仓 {symbol} {pos['side']}仓")
                 if not TRADE_CONFIG['test_mode']:
                     try:
