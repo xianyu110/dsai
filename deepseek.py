@@ -97,7 +97,7 @@ else:  # binance
 # 交易参数配置 - 参考 AlphaArena 多币种策略
 TRADE_CONFIG = {
     'symbols': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'BNB/USDT'],  # 多币种
-    'amount_usd': 20,  # 每次交易20 USDT (5个币种共100 USDT)
+    'amount_usd': 200,  # 每次交易200 USDT (5个币种共1000 USDT)
     'leverage': 10,  # 10倍杠杆
     'timeframe': '15m',  # 15分钟K线
     'test_mode': False,  # 🔴 实盘模式
@@ -407,6 +407,7 @@ def analyze_with_ai(price_data):
 def execute_trade(signal_data, price_data):
     """执行交易 - 参考AlphaArena持仓逻辑"""
     symbol = price_data['symbol']
+    events = []
 
     # OKX合约需要使用 BTC/USDT:USDT 格式
     trade_symbol = symbol
@@ -437,7 +438,14 @@ def execute_trade(signal_data, price_data):
     # 如果禁用自动交易,只显示分析结果
     if not TRADE_CONFIG.get('auto_trade', False):
         print(f"⚠️ 自动交易已禁用,仅记录分析结果")
-        return
+        events.append({
+            'type': 'system',
+            'action': 'auto_trade',
+            'message': '自动交易已禁用，未执行交易',
+            'success': False,
+            'symbol': symbol
+        })
+        return events
 
     # AlphaArena策略：持仓优先
     if current_position:
@@ -468,10 +476,14 @@ def execute_trade(signal_data, price_data):
                             # 平多仓(long)：卖出(sell)，平空仓(short)：买入(buy)
                             side = 'sell' if pos['side'] == 'long' else 'buy'
 
-                            # 转换交易对格式：BNB/USDT -> BNB-USDT-SWAP
+                            # 转换交易对格式：BNB/USDT -> BNB-USDT-SWAP，SOL特殊处理
                             base_symbol = symbol.replace('/USDT', '')
-                            okx_inst_id = f'{base_symbol}-USDT-SWAP'
+                            if base_symbol == 'SOL':
+                                okx_inst_id = 'SOL-USDT-SWAP'
+                            else:
+                                okx_inst_id = f'{base_symbol}-USDT-SWAP'
 
+                            print(f"平仓交易对转换: {symbol} -> {okx_inst_id}")
                             # 使用OKX原生API平仓
                             result = exchange.private_post_trade_order({
                                 'instId': okx_inst_id,
@@ -482,6 +494,18 @@ def execute_trade(signal_data, price_data):
                                 'sz': str(pos['size'])
                             })
                             print("✅ 平仓成功")
+                            events.append({
+                                'type': 'trade',
+                                'action': 'close',
+                                'message': f"平仓成功: {pos['side']}仓 {pos['size']:.6f}",
+                                'success': True,
+                                'symbol': symbol,
+                                'details': {
+                                    'size': pos['size'],
+                                    'side': pos['side'],
+                                    'pnl': pos.get('unrealized_pnl', 0)
+                                }
+                            })
                         else:  # Binance合约平仓
                             params = {'reduceOnly': True}
                             if pos['side'] == 'long':
@@ -489,11 +513,45 @@ def execute_trade(signal_data, price_data):
                             else:
                                 exchange.create_market_order(trade_symbol, 'buy', pos['size'], params)
                             print("✅ 平仓成功")
+                            events.append({
+                                'type': 'trade',
+                                'action': 'close',
+                                'message': f"平仓成功: {pos['side']}仓 {pos['size']:.6f}",
+                                'success': True,
+                                'symbol': symbol,
+                                'details': {
+                                    'size': pos['size'],
+                                    'side': pos['side'],
+                                    'pnl': pos.get('unrealized_pnl', 0)
+                                }
+                            })
                     except Exception as e:
                         print(f"❌ 平仓失败: {e}")
+                        events.append({
+                            'type': 'trade',
+                            'action': 'close',
+                            'message': f"平仓失败: {e}",
+                            'success': False,
+                            'symbol': symbol,
+                            'details': {
+                                'size': pos.get('size'),
+                                'side': pos.get('side')
+                            }
+                        })
             else:
                 print(f"✅ 持有{pos['side']}仓 (价格比例: {price_ratio:.2%}, 盈亏: {pos['unrealized_pnl']:.2f} USDT)")
-        return
+                events.append({
+                    'type': 'analysis',
+                    'action': 'hold',
+                    'message': f"继续持有{pos['side']}仓，盈亏 {pos['unrealized_pnl']:.2f} USDT",
+                    'success': True,
+                    'symbol': symbol,
+                    'details': {
+                        'side': pos['side'],
+                        'pnl': pos.get('unrealized_pnl', 0)
+                    }
+                })
+        return events
 
     # 无持仓时根据信号开仓
     if not current_position and signal_data['signal'] != 'HOLD':
@@ -501,7 +559,14 @@ def execute_trade(signal_data, price_data):
 
         if TRADE_CONFIG['test_mode']:
             print(f"测试模式 - 模拟开仓: {signal_data['signal']} {symbol}")
-            return
+            events.append({
+                'type': 'trade',
+                'action': signal_data['signal'].lower(),
+                'message': f"测试模式 - 模拟开仓: {signal_data['signal']} {symbol}",
+                'success': True,
+                'symbol': symbol
+            })
+            return events
 
         try:
             # 根据AI信心度动态调整杠杆
@@ -538,13 +603,19 @@ def execute_trade(signal_data, price_data):
                 coins_needed = buying_power / current_price  # 购买力 / 价格 = 币数
                 amount_contracts = coins_needed / contract_size  # 币数 / 合约面值 = 张数
 
+                # 确保最少1张合约，避免0张数
+                amount_contracts = max(1, int(amount_contracts))
+                if amount_contracts < 1:
+                    amount_contracts = 1
+
                 print(f"开仓计算:")
                 print(f"  保证金: {TRADE_CONFIG['amount_usd']} USDT × {leverage}倍杠杆 = {buying_power} USDT购买力")
                 print(f"  币数: {buying_power} USDT / ${current_price} = {coins_needed:.6f}")
-                print(f"  合约张数: {coins_needed:.6f} / {contract_size} = {amount_contracts:.4f} 张")
+                print(f"  合约面值: {contract_size}")
+                print(f"  合约张数: {coins_needed:.6f} / {contract_size} = {amount_contracts} 张")
             else:  # Binance
                 buying_power = TRADE_CONFIG['amount_usd'] * leverage
-                amount_contracts = buying_power / current_price
+                amount_contracts = max(1, buying_power / current_price)  # 确保最少1个单位
 
             # 准备交易参数
             params = {}
@@ -554,18 +625,111 @@ def execute_trade(signal_data, price_data):
             if signal_data['signal'] == 'BUY':
                 print(f"🟢 开多仓: {amount_contracts:.6f} 张 {symbol} (杠杆: {leverage}x)")
                 if EXCHANGE_TYPE == 'okx':
+                    # OKX双向持仓模式：使用原生API
+                    base_symbol = symbol.replace('/USDT', '')
+                    # SOL合约使用特殊的格式，其他使用标准格式
+                    if base_symbol == 'SOL':
+                        okx_inst_id = 'SOL-USDT-SWAP'
+                    else:
+                        okx_inst_id = f'{base_symbol}-USDT-SWAP'
+
+                    print(f"交易对转换: {symbol} -> {okx_inst_id}")
+                    result = exchange.private_post_trade_order({
+                        'instId': okx_inst_id,
+                        'tdMode': 'isolated',
+                        'side': 'buy',
+                        'posSide': 'long',
+                        'ordType': 'market',
+                        'sz': str(amount_contracts)  # 移除int转换，使用计算的值
+                    })
+                else:
                     params['posSide'] = 'long'
-                exchange.create_market_order(trade_symbol, 'buy', amount_contracts, params)
+                    exchange.create_market_order(trade_symbol, 'buy', amount_contracts, params)
+                events.append({
+                    'type': 'trade',
+                    'action': 'buy',
+                    'message': f"开多成功: {amount_contracts:.4f} 张 @ 市价 ~${current_price:.2f}",
+                    'success': True,
+                    'symbol': symbol,
+                    'details': {
+                        'amount': float(amount_contracts),
+                        'price': float(current_price),
+                        'leverage': leverage
+                    }
+                })
             elif signal_data['signal'] == 'SELL':
                 print(f"🔴 开空仓: {amount_contracts:.6f} 张 {symbol} (杠杆: {leverage}x)")
                 if EXCHANGE_TYPE == 'okx':
+                    # OKX双向持仓模式：使用原生API
+                    base_symbol = symbol.replace('/USDT', '')
+                    # SOL合约使用特殊的格式，其他使用标准格式
+                    if base_symbol == 'SOL':
+                        okx_inst_id = 'SOL-USDT-SWAP'
+                    else:
+                        okx_inst_id = f'{base_symbol}-USDT-SWAP'
+
+                    print(f"交易对转换: {symbol} -> {okx_inst_id}")
+                    result = exchange.private_post_trade_order({
+                        'instId': okx_inst_id,
+                        'tdMode': 'isolated',
+                        'side': 'sell',
+                        'posSide': 'short',
+                        'ordType': 'market',
+                        'sz': str(amount_contracts)  # 移除int转换，使用计算的值
+                    })
+                else:
                     params['posSide'] = 'short'
-                exchange.create_market_order(trade_symbol, 'sell', amount_contracts, params)
+                    exchange.create_market_order(trade_symbol, 'sell', amount_contracts, params)
+                events.append({
+                    'type': 'trade',
+                    'action': 'sell',
+                    'message': f"开空成功: {amount_contracts:.4f} 张 @ 市价 ~${current_price:.2f}",
+                    'success': True,
+                    'symbol': symbol,
+                    'details': {
+                        'amount': float(amount_contracts),
+                        'price': float(current_price),
+                        'leverage': leverage
+                    }
+                })
             print("✅ 开仓成功")
             time.sleep(2)
         except Exception as e:
             print(f"❌ 开仓失败: {e}")
+            import traceback
+            traceback.print_exc()
 
+            # 检查是否是SOL相关的错误
+            if 'SOL' in symbol:
+                print(f"🔍 SOL开仓调试信息:")
+                print(f"  交易对: {symbol}")
+                print(f"  转换后: {trade_symbol}")
+                if EXCHANGE_TYPE == 'okx':
+                    base_symbol = symbol.replace('/USDT', '')
+                    okx_inst_id = 'SOL-USDT-SWAP' if base_symbol == 'SOL' else f'{base_symbol}-USDT-SWAP'
+                    print(f"  OKX合约ID: {okx_inst_id}")
+                    print(f"  杠杆: {leverage}x")
+                    print(f"  合约张数: {amount_contracts}")
+                print(f"  当前价格: ${current_price}")
+                print(f"  信号: {signal_data.get('signal', 'N/A')}")
+            events.append({
+                'type': 'trade',
+                'action': signal_data['signal'].lower(),
+                'message': f"开仓失败: {e}",
+                'success': False,
+                'symbol': symbol
+            })
+
+    else:
+        events.append({
+            'type': 'analysis',
+            'action': 'hold',
+            'message': '信号为 HOLD，未执行交易',
+            'success': True,
+            'symbol': symbol
+        })
+
+    return events
 
 def trading_bot():
     """主交易机器人函数 - 多币种版本"""

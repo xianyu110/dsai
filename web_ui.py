@@ -170,10 +170,33 @@ def auto_trade_worker():
                     print(f"  💪 信心: {signal_data['confidence']}")
                     print(f"  📝 理由: {signal_data['reason']}")
 
-                    # 执行交易
-                    result = execute_trade(symbol, price_data, signal_data)
-                    if result:
-                        print(f"  ✅ {result}")
+                    add_trade_log(
+                        'analysis',
+                        symbol,
+                        'auto_trade',
+                        f"AI信号: {signal_data['signal']} (信心: {signal_data['confidence']})",
+                        success=True,
+                        details={
+                            'signal': signal_data['signal'],
+                            'confidence': signal_data['confidence'],
+                            'reason': signal_data.get('reason', '')
+                        }
+                    )
+
+                    # 执行交易（使用合约交易逻辑）
+                    trade_events = execute_trade(signal_data, price_data) or []
+                    for event in trade_events:
+                        event_symbol = event.get('symbol', symbol)
+                        add_trade_log(
+                            event.get('type', 'trade'),
+                            event_symbol,
+                            event.get('action', 'auto_trade'),
+                            event.get('message', ''),
+                            success=event.get('success', True),
+                            details=event.get('details')
+                        )
+                        if event.get('message'):
+                            print(f"  📋 {event['message']}")
 
                 except Exception as e:
                     print(f"  ❌ {symbol} 处理失败: {e}")

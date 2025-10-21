@@ -166,6 +166,8 @@ async function fetchMarkets() {
     const symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'BNB/USDT'];
     const grid = document.getElementById('marketsGrid');
 
+    if (!grid) return;
+
     // 首次加载时创建卡片结构
     if (grid.children.length === 0) {
         symbols.forEach(symbol => {
@@ -303,6 +305,8 @@ function updateSpotBalances(balances) {
 
 function updatePositions(positions) {
     const grid = document.getElementById('positionsGrid');
+
+    if (!grid) return;
 
     if (!positions || positions.length === 0) {
         if (grid.innerHTML !== '<div class="card"><p>暂无持仓</p></div>') {
