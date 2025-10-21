@@ -96,8 +96,8 @@ else:  # binance
 
 # 交易参数配置 - 参考 AlphaArena 多币种策略
 TRADE_CONFIG = {
-    'symbols': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT'],  # 多币种
-    'amount_usd': 25,  # 每次交易25 USDT (4个币种共100 USDT)
+    'symbols': ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'BNB/USDT'],  # 多币种
+    'amount_usd': 20,  # 每次交易20 USDT (5个币种共100 USDT)
     'leverage': 10,  # 10倍杠杆
     'timeframe': '15m',  # 15分钟K线
     'test_mode': False,  # 🔴 实盘模式
@@ -159,40 +159,45 @@ def get_ohlcv(symbol):
 
 
 def get_current_position(symbol):
-    """获取指定币种的当前持仓"""
+    """获取指定币种的当前持仓 - 返回所有方向的持仓列表"""
     try:
-        positions_list = exchange.fetch_positions([symbol])
+        # 获取所有持仓(不指定symbol以避免OKX的查询问题)
+        all_positions = exchange.fetch_positions()
 
         # 标准化符号
         if EXCHANGE_TYPE == 'okx':
-            config_symbol_normalized = symbol.replace('/', '/') + ':USDT'
+            target_symbol = symbol.replace('/', '/') + ':USDT'
         else:  # binance
-            config_symbol_normalized = symbol + ':USDT'
+            target_symbol = symbol + ':USDT'
 
-        for pos in positions_list:
-            if pos['symbol'] == config_symbol_normalized:
-                position_amt = 0
-                if 'positionAmt' in pos.get('info', {}):
-                    position_amt = float(pos['info']['positionAmt'])
-                elif 'contracts' in pos:
-                    contracts = float(pos['contracts'])
-                    if pos.get('side') == 'short':
-                        position_amt = -contracts
-                    else:
-                        position_amt = contracts
+        result_positions = []
 
-                if position_amt != 0:
-                    side = 'long' if position_amt > 0 else 'short'
-                    return {
+        for pos in all_positions:
+            if pos['symbol'] == target_symbol:
+                contracts = float(pos.get('contracts', 0))
+
+                if contracts > 0:  # 有持仓
+                    # OKX使用info.posSide区分多空
+                    pos_side = pos.get('info', {}).get('posSide', '')
+                    side = 'long' if pos_side == 'long' else 'short'
+
+                    position_data = {
                         'symbol': symbol,
                         'side': side,
-                        'size': abs(position_amt),
+                        'size': contracts,
                         'entry_price': float(pos.get('entryPrice', 0)),
                         'unrealized_pnl': float(pos.get('unrealizedPnl', 0)),
-                        'position_amt': position_amt,
+                        'leverage': float(pos.get('info', {}).get('lever', 0)),
                     }
+                    result_positions.append(position_data)
 
-        return None
+        # 如果有多个持仓,返回列表;如果只有一个,返回单个对象;如果没有,返回None
+        if len(result_positions) == 0:
+            return None
+        elif len(result_positions) == 1:
+            return result_positions[0]
+        else:
+            return result_positions  # 多个持仓
 
     except Exception as e:
         print(f"{symbol} 获取持仓失败: {e}")

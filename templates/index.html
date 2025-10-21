@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI交易机器人控制台</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 AI交易机器人控制台</h1>
+            <div class="status-bar" id="statusBar">
+                <span>余额: <strong id="balance">-</strong> USDT</span>
+                <span>总盈亏: <strong id="totalPnl" class="pnl">-</strong> USDT</span>
+                <span>更新: <span id="updateTime">-</span></span>
+            </div>
+        </header>
+
+        <section class="positions-section">
+            <h2>📊 当前持仓</h2>
+            <div id="positionsGrid" class="grid"></div>
+        </section>
+
+        <section class="trading-section">
+            <h2>💹 实时行情</h2>
+            <div id="marketsGrid" class="grid"></div>
+        </section>
+
+        <section class="controls-section">
+            <h2>🎮 手动操作</h2>
+            <div class="manual-trade">
+                <select id="tradeSymbol">
+                    <option value="BTC/USDT">BTC/USDT</option>
+                    <option value="ETH/USDT">ETH/USDT</option>
+                    <option value="SOL/USDT">SOL/USDT</option>
+                    <option value="DOGE/USDT">DOGE/USDT</option>
+                    <option value="BNB/USDT">BNB/USDT</option>
+                </select>
+                <input type="number" id="tradeAmount" placeholder="金额(USDT)" value="20">
+                <button onclick="executeTrade('buy')" class="btn btn-long">开多</button>
+                <button onclick="executeTrade('sell')" class="btn btn-short">开空</button>
+                <button onclick="executeTrade('close')" class="btn btn-close">平仓</button>
+            </div>
+        </section>
+
+        <section class="logs-section">
+            <h2>📝 AI分析记录</h2>
+            <div id="logsContainer"></div>
+        </section>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

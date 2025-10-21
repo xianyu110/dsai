@@ -1,0 +1,172 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 20px;
+}
+
+header {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+h1 {
+    font-size: 28px;
+    margin-bottom: 15px;
+}
+
+h2 {
+    font-size: 20px;
+    margin-bottom: 15px;
+    color: #60a5fa;
+}
+
+.status-bar {
+    display: flex;
+    gap: 30px;
+    font-size: 14px;
+}
+
+.status-bar strong {
+    color: #60a5fa;
+    font-size: 18px;
+}
+
+section {
+    background: #1e293b;
+    padding: 20px;
+    border-radius: 12px;
+    margin-bottom: 20px;
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 15px;
+}
+
+.card {
+    background: #334155;
+    padding: 20px;
+    border-radius: 8px;
+    border-left: 4px solid #60a5fa;
+}
+
+.card h3 {
+    font-size: 18px;
+    margin-bottom: 10px;
+    color: #60a5fa;
+}
+
+.card-data {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.pnl {
+    font-weight: bold;
+}
+
+.pnl.positive {
+    color: #10b981;
+}
+
+.pnl.negative {
+    color: #ef4444;
+}
+
+.manual-trade {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.manual-trade select,
+.manual-trade input {
+    padding: 10px 15px;
+    background: #334155;
+    border: 1px solid #475569;
+    border-radius: 6px;
+    color: #e2e8f0;
+    font-size: 14px;
+}
+
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    transition: opacity 0.2s;
+}
+
+.btn:hover {
+    opacity: 0.8;
+}
+
+.btn-long {
+    background: #10b981;
+    color: white;
+}
+
+.btn-short {
+    background: #ef4444;
+    color: white;
+}
+
+.btn-close {
+    background: #f59e0b;
+    color: white;
+}
+
+#logsContainer {
+    max-height: 400px;
+    overflow-y: auto;
+    font-size: 13px;
+    font-family: 'Courier New', monospace;
+}
+
+.log-entry {
+    padding: 10px;
+    margin-bottom: 10px;
+    background: #334155;
+    border-radius: 6px;
+    border-left: 3px solid #60a5fa;
+}
+
+.log-entry .time {
+    color: #94a3b8;
+    font-size: 12px;
+}
+
+.log-entry .signal-buy {
+    color: #10b981;
+    font-weight: bold;
+}
+
+.log-entry .signal-sell {
+    color: #ef4444;
+    font-weight: bold;
+}
+
+.log-entry .signal-hold {
+    color: #f59e0b;
+    font-weight: bold;
+}
