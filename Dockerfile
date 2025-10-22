@@ -18,15 +18,14 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean /etc/apt/apt.conf.d/*-docker-* && \
     sed -i '/backports/d' /etc/apt/sources.list && \
     apt-get update --allow-insecure-repositories 2>&1 | grep -v "^W:" || true && \
     apt-get install -y --no-install-recommends --allow-unauthenticated \
-    python3.9 \
+    python3 \
     python3-pip \
-    python3.9-dev \
+    python3-dev \
     gcc \
     g++ \
     curl \
     tzdata \
-    && ln -sf /usr/bin/python3.9 /usr/bin/python \
-    && ln -sf /usr/bin/python3.9 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3 /usr/bin/python \
     && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
