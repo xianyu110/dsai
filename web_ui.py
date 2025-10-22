@@ -7,6 +7,8 @@ from dotenv import load_dotenv
 import threading
 import time
 from collections import deque
+import subprocess
+import signal
 
 load_dotenv()
 from deepseek import (
@@ -23,6 +25,27 @@ auto_trade_running = False
 
 # 交易操作日志（最多保存100条）
 trade_logs = deque(maxlen=100)
+
+# 策略进程管理
+strategy_processes = {}
+
+# 可用策略列表
+AVAILABLE_STRATEGIES = {
+    'deepseek': {
+        'name': 'DeepSeek AI 策略',
+        'description': '基于 DeepSeek AI 的多币种交易策略',
+        'script': 'deepseek.py',
+        'status': 'stopped',
+        'auto_start': False
+    },
+    'reverse_gpt5': {
+        'name': 'GPT-5 反向跟单',
+        'description': 'GPT-5 做多我们做空，GPT-5 做空我们做多',
+        'script': 'reverse_gpt5.py',
+        'status': 'stopped',
+        'auto_start': False
+    }
+}
 
 @app.route('/')
 def index():
@@ -717,6 +740,134 @@ def manual_execute():
 
         return jsonify({'success': False, 'error': '无效操作'})
 
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/strategies')
+def get_strategies():
+    """获取所有可用策略"""
+    try:
+        strategies_list = []
+        for strategy_id, strategy_info in AVAILABLE_STRATEGIES.items():
+            # 检查进程状态
+            if strategy_id in strategy_processes:
+                proc = strategy_processes[strategy_id]
+                if proc.poll() is None:
+                    strategy_info['status'] = 'running'
+                else:
+                    strategy_info['status'] = 'stopped'
+                    del strategy_processes[strategy_id]
+
+            strategies_list.append({
+                'id': strategy_id,
+                **strategy_info
+            })
+
+        return jsonify({
+            'success': True,
+            'strategies': strategies_list,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/strategy/<strategy_id>/start', methods=['POST'])
+def start_strategy(strategy_id):
+    """启动策略"""
+    try:
+        if strategy_id not in AVAILABLE_STRATEGIES:
+            return jsonify({'success': False, 'error': '策略不存在'})
+
+        strategy = AVAILABLE_STRATEGIES[strategy_id]
+
+        # 检查是否已经在运行
+        if strategy_id in strategy_processes:
+            proc = strategy_processes[strategy_id]
+            if proc.poll() is None:
+                return jsonify({'success': False, 'error': '策略已在运行中'})
+
+        # 启动策略进程
+        script_path = strategy['script']
+        if not os.path.exists(script_path):
+            return jsonify({'success': False, 'error': f'策略文件不存在: {script_path}'})
+
+        proc = subprocess.Popen(
+            ['python3', script_path],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setsid  # 创建新的进程组
+        )
+
+        strategy_processes[strategy_id] = proc
+        strategy['status'] = 'running'
+
+        add_trade_log('system', 'STRATEGY', 'start', f'{strategy["name"]} 已启动', success=True)
+
+        return jsonify({
+            'success': True,
+            'message': f'{strategy["name"]} 已启动',
+            'strategy_id': strategy_id,
+            'pid': proc.pid
+        })
+    except Exception as e:
+        add_trade_log('system', 'STRATEGY', 'start', f'启动策略失败: {str(e)}', success=False)
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/strategy/<strategy_id>/stop', methods=['POST'])
+def stop_strategy(strategy_id):
+    """停止策略"""
+    try:
+        if strategy_id not in AVAILABLE_STRATEGIES:
+            return jsonify({'success': False, 'error': '策略不存在'})
+
+        strategy = AVAILABLE_STRATEGIES[strategy_id]
+
+        # 检查进程是否存在
+        if strategy_id not in strategy_processes:
+            strategy['status'] = 'stopped'
+            return jsonify({'success': False, 'error': '策略未在运行'})
+
+        proc = strategy_processes[strategy_id]
+
+        # 尝试优雅地终止进程
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            time.sleep(2)
+
+            # 如果还没停止，强制终止
+            if proc.poll() is None:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except:
+            proc.terminate()
+            time.sleep(1)
+            if proc.poll() is None:
+                proc.kill()
+
+        del strategy_processes[strategy_id]
+        strategy['status'] = 'stopped'
+
+        add_trade_log('system', 'STRATEGY', 'stop', f'{strategy["name"]} 已停止', success=True)
+
+        return jsonify({
+            'success': True,
+            'message': f'{strategy["name"]} 已停止',
+            'strategy_id': strategy_id
+        })
+    except Exception as e:
+        add_trade_log('system', 'STRATEGY', 'stop', f'停止策略失败: {str(e)}', success=False)
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/strategy/<strategy_id>/logs')
+def get_strategy_logs(strategy_id):
+    """获取策略日志（最近20条）"""
+    try:
+        # 从 trade_logs 中筛选该策略的日志
+        strategy_logs = [log for log in trade_logs if log.get('strategy_id') == strategy_id]
+        return jsonify({
+            'success': True,
+            'logs': list(strategy_logs)[-20:],
+            'timestamp': datetime.now().isoformat()
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
