@@ -51,6 +51,11 @@ AVAILABLE_STRATEGIES = {
 def index():
     return render_template('index.html')
 
+@app.route('/strategy_demo')
+def strategy_demo():
+    """策略管理页面"""
+    return render_template('strategy_demo.html')
+
 def get_spot_balance():
     """获取现货账户余额"""
     try:
