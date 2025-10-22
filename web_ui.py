@@ -39,6 +39,14 @@ AVAILABLE_STRATEGIES = {
         'auto_start': False,
         'mode': 'live'  # 实盘
     },
+    'grok': {
+        'name': 'Grok AI 策略 [模拟盘]',
+        'description': '基于 Grok AI 的市场分析和技术指标交易（安全测试）',
+        'script': 'grok_strategy.py',
+        'status': 'stopped',
+        'auto_start': False,
+        'mode': 'simulated'  # 模拟盘
+    },
     'reverse_gpt5': {
         'name': 'GPT-5 反向跟单 [模拟盘]',
         'description': 'GPT-5 做多我们做空，GPT-5 做空我们做多（安全测试，不真实交易）',
