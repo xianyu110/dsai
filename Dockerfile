@@ -1,5 +1,5 @@
-# 使用官方Python 3.9镜像作为基础镜像（基于 Debian Bookworm）
-FROM python:3.9-slim-bookworm
+# 使用 Ubuntu 基础镜像避免 Debian GPG 问题
+FROM ubuntu:22.04
 
 # 设置工作目录
 WORKDIR /app
@@ -7,19 +7,22 @@ WORKDIR /app
 # 设置环境变量
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    TZ=Asia/Shanghai
+    TZ=Asia/Shanghai \
+    DEBIAN_FRONTEND=noninteractive
 
-# 安装系统依赖
+# 安装 Python 和系统依赖
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends --allow-unauthenticated \
-    gnupg \
-    ca-certificates && \
-    apt-get update && \
     apt-get install -y --no-install-recommends \
+    python3.9 \
+    python3-pip \
+    python3.9-dev \
     gcc \
     g++ \
     curl \
     tzdata \
+    && ln -sf /usr/bin/python3.9 /usr/bin/python \
+    && ln -sf /usr/bin/python3.9 /usr/bin/python3 \
+    && ln -sf /usr/bin/pip3 /usr/bin/pip \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # 复制依赖文件
