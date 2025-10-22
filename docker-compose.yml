@@ -10,6 +10,12 @@ services:
     ports:
       - "8888:8888"
     environment:
+      # NumPy/OpenBLAS 线程配置（避免 pthread_create 错误）
+      - OPENBLAS_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+
       # AI模型配置
       - AI_MODEL=${AI_MODEL:-deepseek}
       - USE_RELAY_API=${USE_RELAY_API:-true}
@@ -55,6 +61,12 @@ services:
         reservations:
           cpus: '0.5'
           memory: 256M
+
+    # 安全选项（允许创建线程）
+    security_opt:
+      - seccomp:unconfined
+    cap_add:
+      - SYS_NICE
 
     # 健康检查
     healthcheck:
