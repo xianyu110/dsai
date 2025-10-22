@@ -10,13 +10,21 @@ __pycache__/
 *.so
 .Python
 *.egg-info/
-dist/
 build/
+dist/
 *.egg
 venv/
 env/
 ENV/
 .venv
+
+# PyInstaller
+*.spec.bak
+*.manifest
+*.exe
+*.app
+*.dmg
+*.zip
 
 # 日志和数据
 *.log
