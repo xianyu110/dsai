@@ -41,27 +41,23 @@ else:
 from openai import OpenAI
 
 # AI客户端不需要单独配置代理，会自动使用系统环境变量
-http_client = None
 
 if AI_MODEL == 'grok':
     ai_client = OpenAI(
         api_key=API_KEY,
-        base_url=API_BASE_URL,
-        http_client=http_client
+        base_url=API_BASE_URL
     )
     MODEL_NAME = 'grok-4'  # Grok 4
 elif AI_MODEL == 'claude':
     ai_client = OpenAI(
         api_key=API_KEY,
-        base_url=API_BASE_URL,
-        http_client=http_client
+        base_url=API_BASE_URL
     )
     MODEL_NAME = 'claude-sonnet-4-5-20250929'  # Claude Sonnet 4.5
 else:  # deepseek
     ai_client = OpenAI(
         api_key=API_KEY,
-        base_url=API_BASE_URL,
-        http_client=http_client
+        base_url=API_BASE_URL
     )
     MODEL_NAME = 'deepseek-chat'  # DeepSeek V3.1
 
