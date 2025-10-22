@@ -1,5 +1,5 @@
-# 使用官方Python 3.9镜像作为基础镜像
-FROM python:3.9-slim
+# 使用官方Python 3.9镜像作为基础镜像（基于 Debian Bookworm）
+FROM python:3.9-slim-bookworm
 
 # 设置工作目录
 WORKDIR /app
