@@ -33,8 +33,8 @@ RUN rm -f /etc/apt/apt.conf.d/docker-clean /etc/apt/apt.conf.d/*-docker-* && \
 COPY requirements.txt .
 
 # 升级 pip 并安装 Python 依赖
-RUN python -m pip install --upgrade pip setuptools wheel && \
-    pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade --no-cache-dir pip setuptools wheel --progress-bar off && \
+    pip install --no-cache-dir -r requirements.txt --progress-bar off
 
 # 复制项目文件
 COPY . .
