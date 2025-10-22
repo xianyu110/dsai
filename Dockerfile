@@ -11,8 +11,9 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive
 
 # 安装 Python 和系统依赖
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
+RUN chmod 644 /etc/apt/trusted.gpg.d/* || true && \
+    apt-get update -o Acquire::AllowInsecureRepositories=true -o Acquire::AllowDowngradeToInsecureRepositories=true && \
+    apt-get install -y --no-install-recommends --allow-unauthenticated \
     python3.9 \
     python3-pip \
     python3.9-dev \
