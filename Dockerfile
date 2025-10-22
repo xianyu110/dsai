@@ -16,7 +16,6 @@ RUN apt-get update && \
     g++ \
     curl \
     tzdata \
-    && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 # 复制依赖文件

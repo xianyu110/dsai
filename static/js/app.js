@@ -895,6 +895,131 @@ async function refreshTradeLogs() {
     await fetchTradeLogs();
 }
 
+// 配置弹窗功能
+function openConfigModal() {
+    const modal = document.getElementById('configModal');
+    modal.classList.add('active');
+    loadConfig();
+}
+
+function closeConfigModal() {
+    const modal = document.getElementById('configModal');
+    modal.classList.remove('active');
+}
+
+function switchConfigTab(tabName) {
+    // 移除所有active类
+    document.querySelectorAll('.config-tab').forEach(tab => {
+        tab.classList.remove('active');
+    });
+    document.querySelectorAll('.config-panel').forEach(panel => {
+        panel.classList.remove('active');
+    });
+
+    // 激活选中的标签
+    event.target.classList.add('active');
+    document.getElementById(tabName + 'Config').classList.add('active');
+}
+
+async function loadConfig() {
+    try {
+        const response = await fetch('/api/config');
+        const result = await response.json();
+
+        if (result.success) {
+            const config = result.config;
+
+            // 交易所配置
+            document.getElementById('exchangeType').value = config.exchange_type || 'okx';
+            document.getElementById('okxApiKey').value = config.okx_api_key || '';
+            document.getElementById('okxSecret').value = config.okx_secret || '';
+            document.getElementById('okxPassword').value = config.okx_password || '';
+            document.getElementById('binanceApiKey').value = config.binance_api_key || '';
+            document.getElementById('binanceSecret').value = config.binance_secret || '';
+
+            // AI配置
+            document.getElementById('aiModel').value = config.ai_model || 'deepseek';
+            document.getElementById('useRelayApi').checked = config.use_relay_api || false;
+            document.getElementById('relayApiBaseUrl').value = config.relay_api_base_url || '';
+            document.getElementById('relayApiKey').value = config.relay_api_key || '';
+            document.getElementById('deepseekApiKey').value = config.deepseek_api_key || '';
+            document.getElementById('grokApiKey').value = config.grok_api_key || '';
+            document.getElementById('claudeApiKey').value = config.claude_api_key || '';
+
+            // 代理配置
+            document.getElementById('httpProxy').value = config.http_proxy || '';
+            document.getElementById('httpsProxy').value = config.https_proxy || '';
+
+            // 交易配置
+            document.getElementById('symbols').value = config.symbols || 'BTC/USDT,ETH/USDT';
+            document.getElementById('amountUsd').value = config.amount_usd || '100';
+            document.getElementById('leverage').value = config.leverage || '5';
+        }
+    } catch (error) {
+        console.error('加载配置失败:', error);
+        alert('加载配置失败: ' + error.message);
+    }
+}
+
+async function saveConfig() {
+    try {
+        const config = {
+            exchange_type: document.getElementById('exchangeType').value,
+            okx_api_key: document.getElementById('okxApiKey').value,
+            okx_secret: document.getElementById('okxSecret').value,
+            okx_password: document.getElementById('okxPassword').value,
+            binance_api_key: document.getElementById('binanceApiKey').value,
+            binance_secret: document.getElementById('binanceSecret').value,
+            ai_model: document.getElementById('aiModel').value,
+            use_relay_api: document.getElementById('useRelayApi').checked,
+            relay_api_base_url: document.getElementById('relayApiBaseUrl').value,
+            relay_api_key: document.getElementById('relayApiKey').value,
+            deepseek_api_key: document.getElementById('deepseekApiKey').value,
+            grok_api_key: document.getElementById('grokApiKey').value,
+            claude_api_key: document.getElementById('claudeApiKey').value,
+            http_proxy: document.getElementById('httpProxy').value,
+            https_proxy: document.getElementById('httpsProxy').value,
+            symbols: document.getElementById('symbols').value,
+            amount_usd: document.getElementById('amountUsd').value,
+            leverage: document.getElementById('leverage').value
+        };
+
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(config)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            alert('配置保存成功！\n\n' + result.message);
+            closeConfigModal();
+
+            if (result.restart_required) {
+                if (confirm('配置已更新，需要重启应用使配置生效。\n是否现在刷新页面？')) {
+                    window.location.reload();
+                }
+            }
+        } else {
+            alert('保存配置失败: ' + result.error);
+        }
+    } catch (error) {
+        console.error('保存配置失败:', error);
+        alert('保存配置失败: ' + error.message);
+    }
+}
+
+// 点击弹窗外部关闭
+document.addEventListener('click', (e) => {
+    const modal = document.getElementById('configModal');
+    if (e.target === modal) {
+        closeConfigModal();
+    }
+});
+
 // 初始化
 fetchStatus();
 fetchSpotBalance();

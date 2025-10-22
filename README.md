@@ -30,29 +30,67 @@ RELAY_API_BASE_URL=https://apipro.maynor1024.live/v1
 RELAY_API_KEY=你的密钥
 ```
 
-### 快速启动
+## 🚀 快速部署
 
-**🐳 生产部署 (Docker + VPS) - 推荐**
+### 方式一：一键 Docker 部署（推荐）
+
 ```bash
-# 一键部署
-./deploy.sh
-
-# 查看日志
-docker-compose logs -f
-
-# 更新升级
-./update.sh
+# 从 GitHub 一键部署
+curl -fsSL https://raw.githubusercontent.com/xianyu110/dsai/main/deploy_from_github.sh | bash
 ```
-📖 详细部署文档: [README_DEPLOY.md](./README_DEPLOY.md)
 
-**💻 本地开发**
+**或手动部署:**
+```bash
+# 1. 克隆项目
+git clone https://github.com/xianyu110/dsai.git
+cd dsai
 
-方式一: 使用启动脚本
+# 2. 配置环境变量
+cp .env.example .env
+nano .env  # 填入你的 API 密钥
+
+# 3. 启动容器
+docker-compose up -d
+
+# 4. 查看日志
+docker-compose logs -f
+```
+
+访问应用: http://localhost:8888
+
+📖 **详细文档:** [DOCKER_DEPLOY.md](./DOCKER_DEPLOY.md)
+
+### 方式二：客户端打包版（无需 Docker）
+
+**macOS 用户:**
+```bash
+# 打包成 DMG 镜像
+./build_macos.sh
+
+# 生成的文件
+dist/TradingBot.app              # macOS 应用
+dist/TradingBot-macOS-arm64.dmg  # DMG 镜像
+```
+
+**Windows 用户:**
+```cmd
+REM 打包成 EXE
+build_windows.bat
+
+REM 生成的文件
+dist\TradingBot-Windows.zip      REM ZIP 压缩包
+```
+
+📖 **详细文档:** [BUILD_CLIENT.md](./BUILD_CLIENT.md)
+
+### 方式三：本地开发
+
+**使用启动脚本:**
 ```bash
 ./start.sh
 ```
 
-方式二: 直接运行
+**或直接运行:**
 ```bash
 # Web界面 (带热重载)
 python3 web_ui.py
@@ -61,7 +99,7 @@ python3 web_ui.py
 python3 deepseek.py
 ```
 
-访问Web界面: http://localhost:8888
+访问Web界面: http://localhost:5000
 
 ## ⚠️ 风险提示
 

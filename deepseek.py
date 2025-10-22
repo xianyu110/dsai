@@ -868,6 +868,10 @@ def main():
         # 每15分钟执行一次
         schedule.every(15).minutes.do(trading_bot)
         print("执行频率: 每15分钟一次")
+    elif TRADE_CONFIG['timeframe'] == '3m':
+        # 每3分钟执行一次
+        schedule.every(3).minutes.do(trading_bot)
+        print("执行频率: 每3分钟一次")
     else:
         # 默认1小时
         schedule.every().hour.at(":01").do(trading_bot)

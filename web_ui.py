@@ -376,6 +376,147 @@ def get_trade_logs():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    """获取当前环境变量配置（脱敏）"""
+    try:
+        config = {
+            'exchange_type': os.getenv('EXCHANGE_TYPE', 'okx'),
+            'okx_api_key': '***' + (os.getenv('OKX_API_KEY', '')[-4:] if os.getenv('OKX_API_KEY') else ''),
+            'okx_secret': '***' if os.getenv('OKX_SECRET') else '',
+            'okx_password': '***' if os.getenv('OKX_PASSWORD') else '',
+            'binance_api_key': '***' + (os.getenv('BINANCE_API_KEY', '')[-4:] if os.getenv('BINANCE_API_KEY') else ''),
+            'binance_secret': '***' if os.getenv('BINANCE_SECRET') else '',
+            'ai_model': os.getenv('AI_MODEL', 'deepseek'),
+            'use_relay_api': os.getenv('USE_RELAY_API', 'false').lower() == 'true',
+            'relay_api_base_url': os.getenv('RELAY_API_BASE_URL', ''),
+            'relay_api_key': '***' if os.getenv('RELAY_API_KEY') else '',
+            'deepseek_api_key': '***' if os.getenv('DEEPSEEK_API_KEY') else '',
+            'grok_api_key': '***' if os.getenv('GROK_API_KEY') else '',
+            'claude_api_key': '***' if os.getenv('CLAUDE_API_KEY') else '',
+            'http_proxy': os.getenv('HTTP_PROXY', ''),
+            'https_proxy': os.getenv('HTTPS_PROXY', ''),
+            'symbols': os.getenv('SYMBOLS', 'BTC/USDT,ETH/USDT'),
+            'amount_usd': os.getenv('AMOUNT_USD', '100'),
+            'leverage': os.getenv('LEVERAGE', '5'),
+            'has_config': os.path.exists('.env')
+        }
+        return jsonify({'success': True, 'config': config})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/config', methods=['POST'])
+def update_config():
+    """更新环境变量配置"""
+    try:
+        data = request.json
+
+        # 读取现有的.env文件
+        env_path = '.env'
+        env_content = {}
+
+        if os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        env_content[key.strip()] = value.strip()
+
+        # 更新配置（只更新提供的字段）
+        if 'exchange_type' in data:
+            env_content['EXCHANGE_TYPE'] = data['exchange_type']
+
+        # OKX配置
+        if 'okx_api_key' in data and data['okx_api_key'] and not data['okx_api_key'].startswith('***'):
+            env_content['OKX_API_KEY'] = data['okx_api_key']
+        if 'okx_secret' in data and data['okx_secret'] and data['okx_secret'] != '***':
+            env_content['OKX_SECRET'] = data['okx_secret']
+        if 'okx_password' in data and data['okx_password'] and data['okx_password'] != '***':
+            env_content['OKX_PASSWORD'] = data['okx_password']
+
+        # Binance配置
+        if 'binance_api_key' in data and data['binance_api_key'] and not data['binance_api_key'].startswith('***'):
+            env_content['BINANCE_API_KEY'] = data['binance_api_key']
+        if 'binance_secret' in data and data['binance_secret'] and data['binance_secret'] != '***':
+            env_content['BINANCE_SECRET'] = data['binance_secret']
+
+        # AI配置
+        if 'ai_model' in data:
+            env_content['AI_MODEL'] = data['ai_model']
+        if 'use_relay_api' in data:
+            env_content['USE_RELAY_API'] = 'true' if data['use_relay_api'] else 'false'
+        if 'relay_api_base_url' in data:
+            env_content['RELAY_API_BASE_URL'] = data['relay_api_base_url']
+        if 'relay_api_key' in data and data['relay_api_key'] and data['relay_api_key'] != '***':
+            env_content['RELAY_API_KEY'] = data['relay_api_key']
+        if 'deepseek_api_key' in data and data['deepseek_api_key'] and data['deepseek_api_key'] != '***':
+            env_content['DEEPSEEK_API_KEY'] = data['deepseek_api_key']
+        if 'grok_api_key' in data and data['grok_api_key'] and data['grok_api_key'] != '***':
+            env_content['GROK_API_KEY'] = data['grok_api_key']
+        if 'claude_api_key' in data and data['claude_api_key'] and data['claude_api_key'] != '***':
+            env_content['CLAUDE_API_KEY'] = data['claude_api_key']
+
+        # 代理配置
+        if 'http_proxy' in data:
+            env_content['HTTP_PROXY'] = data['http_proxy']
+        if 'https_proxy' in data:
+            env_content['HTTPS_PROXY'] = data['https_proxy']
+
+        # 交易配置
+        if 'symbols' in data:
+            env_content['SYMBOLS'] = data['symbols']
+        if 'amount_usd' in data:
+            env_content['AMOUNT_USD'] = str(data['amount_usd'])
+        if 'leverage' in data:
+            env_content['LEVERAGE'] = str(data['leverage'])
+
+        # 写入.env文件
+        with open(env_path, 'w', encoding='utf-8') as f:
+            f.write('# AI 模型配置\n')
+            f.write('# 可选: deepseek, grok, claude\n')
+            f.write(f'AI_MODEL={env_content.get("AI_MODEL", "deepseek")}\n\n')
+
+            f.write('# 是否使用中转API (true/false)\n')
+            f.write(f'USE_RELAY_API={env_content.get("USE_RELAY_API", "false")}\n\n')
+
+            f.write('# 中转 API 配置\n')
+            f.write(f'RELAY_API_BASE_URL={env_content.get("RELAY_API_BASE_URL", "")}\n')
+            f.write(f'RELAY_API_KEY={env_content.get("RELAY_API_KEY", "")}\n\n')
+
+            f.write('# 官方 API 配置\n')
+            f.write(f'DEEPSEEK_API_KEY={env_content.get("DEEPSEEK_API_KEY", "")}\n')
+            f.write(f'GROK_API_KEY={env_content.get("GROK_API_KEY", "")}\n')
+            f.write(f'CLAUDE_API_KEY={env_content.get("CLAUDE_API_KEY", "")}\n\n')
+
+            f.write('# 选择交易所\n')
+            f.write(f'EXCHANGE_TYPE={env_content.get("EXCHANGE_TYPE", "okx")}\n\n')
+
+            f.write('# 代理设置 (如果需要访问 OKX)\n')
+            f.write('# 格式: http://127.0.0.1:7890 或 socks5://127.0.0.1:1080\n')
+            f.write(f'HTTP_PROXY={env_content.get("HTTP_PROXY", "")}\n')
+            f.write(f'HTTPS_PROXY={env_content.get("HTTPS_PROXY", "")}\n\n')
+
+            f.write('# 欧易配置 (按下方步骤获取)\n')
+            f.write(f'OKX_API_KEY={env_content.get("OKX_API_KEY", "")}\n')
+            f.write(f'OKX_SECRET={env_content.get("OKX_SECRET", "")}\n')
+            f.write(f'OKX_PASSWORD={env_content.get("OKX_PASSWORD", "")}\n\n')
+
+            f.write('# 币安配置 (暂不使用)\n')
+            f.write(f'BINANCE_API_KEY={env_content.get("BINANCE_API_KEY", "")}\n')
+            f.write(f'BINANCE_SECRET={env_content.get("BINANCE_SECRET", "")}\n\n')
+
+        add_trade_log('system', 'CONFIG', 'update', '配置已更新，需要重启应用生效', success=True)
+
+        return jsonify({
+            'success': True,
+            'message': '配置已保存，请重启应用使配置生效',
+            'restart_required': True
+        })
+    except Exception as e:
+        add_trade_log('system', 'CONFIG', 'update', f'配置更新失败: {str(e)}', success=False)
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/execute', methods=['POST'])
 def manual_execute():
     """手动执行交易"""

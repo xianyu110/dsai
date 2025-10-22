@@ -18,6 +18,9 @@
             <div class="header-top">
                 <h1>🤖 AI交易机器人控制台</h1>
                 <div class="header-actions">
+                    <button class="config-btn" onclick="openConfigModal()" title="环境配置">
+                        ⚙️ 配置
+                    </button>
                     <span class="connection-status">
                         <span class="pulse"></span>
                         已连接
@@ -154,6 +157,142 @@
                 </div>
                 <div id="spotGrid" class="grid"></div>
             </section>
+        </div>
+    </div>
+
+    <!-- 配置弹窗 -->
+    <div id="configModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>⚙️ 环境配置</h2>
+                <button class="modal-close" onclick="closeConfigModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="config-tabs">
+                    <button class="config-tab active" onclick="switchConfigTab('exchange')">交易所</button>
+                    <button class="config-tab" onclick="switchConfigTab('ai')">AI</button>
+                    <button class="config-tab" onclick="switchConfigTab('proxy')">网络</button>
+                    <button class="config-tab" onclick="switchConfigTab('trade')">交易参数</button>
+                </div>
+
+                <div id="exchangeConfig" class="config-panel active">
+                    <h3>交易所配置</h3>
+                    <div class="form-group">
+                        <label>交易所类型</label>
+                        <select id="exchangeType">
+                            <option value="okx">OKX (推荐)</option>
+                            <option value="binance">Binance</option>
+                        </select>
+                    </div>
+
+                    <h4>OKX 配置</h4>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="text" id="okxApiKey" placeholder="请输入 OKX API Key">
+                    </div>
+                    <div class="form-group">
+                        <label>Secret</label>
+                        <input type="password" id="okxSecret" placeholder="请输入 OKX Secret">
+                    </div>
+                    <div class="form-group">
+                        <label>Password</label>
+                        <input type="password" id="okxPassword" placeholder="请输入 OKX Password">
+                    </div>
+
+                    <h4>Binance 配置</h4>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="text" id="binanceApiKey" placeholder="请输入 Binance API Key">
+                    </div>
+                    <div class="form-group">
+                        <label>Secret</label>
+                        <input type="password" id="binanceSecret" placeholder="请输入 Binance Secret">
+                    </div>
+                </div>
+
+                <div id="aiConfig" class="config-panel">
+                    <h3>AI 配置</h3>
+                    <div class="form-group">
+                        <label>AI 模型</label>
+                        <select id="aiModel">
+                            <option value="deepseek">DeepSeek (推荐)</option>
+                            <option value="grok">Grok (xAI)</option>
+                            <option value="claude">Claude (Anthropic)</option>
+                        </select>
+                    </div>
+
+                    <h4>中转 API 配置</h4>
+                    <div class="form-group">
+                        <label style="display: flex; align-items: center; gap: 8px;">
+                            <input type="checkbox" id="useRelayApi" style="width: auto; margin: 0;">
+                            使用中转 API（性价比更高）
+                        </label>
+                        <small>中转API可以降低成本，提供更稳定的服务</small>
+                    </div>
+                    <div class="form-group">
+                        <label>中转 API 地址</label>
+                        <input type="text" id="relayApiBaseUrl" placeholder="例如: https://api.example.com/v1">
+                    </div>
+                    <div class="form-group">
+                        <label>中转 API Key</label>
+                        <input type="password" id="relayApiKey" placeholder="请输入中转 API Key">
+                    </div>
+
+                    <h4>官方 API 配置</h4>
+                    <div class="form-group">
+                        <label>DeepSeek API Key</label>
+                        <input type="password" id="deepseekApiKey" placeholder="请输入官方 DeepSeek API Key">
+                        <small>不使用中转API时需要</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Grok API Key</label>
+                        <input type="password" id="grokApiKey" placeholder="请输入 Grok API Key">
+                    </div>
+                    <div class="form-group">
+                        <label>Claude API Key</label>
+                        <input type="password" id="claudeApiKey" placeholder="请输入 Claude API Key">
+                    </div>
+                </div>
+
+                <div id="proxyConfig" class="config-panel">
+                    <h3>网络代理配置</h3>
+                    <div class="form-group">
+                        <label>HTTP Proxy</label>
+                        <input type="text" id="httpProxy" placeholder="例如: http://127.0.0.1:7890">
+                        <small>用于访问交易所和AI服务（可选）</small>
+                    </div>
+                    <div class="form-group">
+                        <label>HTTPS Proxy</label>
+                        <input type="text" id="httpsProxy" placeholder="例如: http://127.0.0.1:7890">
+                        <small>留空则使用 HTTP Proxy 设置</small>
+                    </div>
+                </div>
+
+                <div id="tradeConfig" class="config-panel">
+                    <h3>交易参数配置</h3>
+                    <div class="form-group">
+                        <label>交易币种（逗号分隔）</label>
+                        <input type="text" id="symbols" placeholder="例如: BTC/USDT,ETH/USDT">
+                    </div>
+                    <div class="form-group">
+                        <label>默认交易金额 (USDT)</label>
+                        <input type="number" id="amountUsd" placeholder="100" min="1">
+                    </div>
+                    <div class="form-group">
+                        <label>默认杠杆倍数</label>
+                        <select id="leverage">
+                            <option value="3">3倍（保守）</option>
+                            <option value="5">5倍（平衡）</option>
+                            <option value="10">10倍（激进）</option>
+                            <option value="20">20倍（极限）</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfigModal()">取消</button>
+                <button class="btn btn-primary" onclick="saveConfig()">保存配置</button>
+            </div>
         </div>
     </div>
 
