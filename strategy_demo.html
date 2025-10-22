@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>策略管理演示</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #1a1a1a;
+            color: #fff;
+        }
+        .strategy-card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 15px 0;
+            border-left: 4px solid #4CAF50;
+        }
+        .strategy-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .strategy-name {
+            font-size: 20px;
+            font-weight: bold;
+        }
+        .status-badge {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-running {
+            background: #4CAF50;
+            color: white;
+        }
+        .status-stopped {
+            background: #666;
+            color: white;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .btn-start {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-stop {
+            background: #f44336;
+            color: white;
+        }
+        .btn-logs {
+            background: #2196F3;
+            color: white;
+        }
+        .logs {
+            margin-top: 15px;
+            padding: 10px;
+            background: #1a1a1a;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            display: none;
+        }
+        .log-entry {
+            padding: 5px;
+            border-bottom: 1px solid #333;
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🤖 策略管理控制台</h1>
+    <p>管理和监控所有交易策略</p>
+
+    <div id="strategies-container">
+        <p>加载中...</p>
+    </div>
+
+    <script>
+        // 加载策略列表
+        async function loadStrategies() {
+            try {
+                const response = await fetch('/api/strategies');
+                const data = await response.json();
+
+                if (data.success) {
+                    displayStrategies(data.strategies);
+                } else {
+                    console.error('加载失败:', data.error);
+                }
+            } catch (error) {
+                console.error('请求失败:', error);
+            }
+        }
+
+        // 显示策略
+        function displayStrategies(strategies) {
+            const container = document.getElementById('strategies-container');
+            container.innerHTML = '';
+
+            strategies.forEach(strategy => {
+                const card = document.createElement('div');
+                card.className = 'strategy-card';
+                card.id = `strategy-${strategy.id}`;
+
+                const statusClass = strategy.status === 'running' ? 'status-running' : 'status-stopped';
+                const statusText = strategy.status === 'running' ? '运行中' : '已停止';
+
+                card.innerHTML = `
+                    <div class="strategy-header">
+                        <div class="strategy-name">${strategy.name}</div>
+                        <span class="status-badge ${statusClass}" id="status-${strategy.id}">
+                            ${statusText}
+                        </span>
+                    </div>
+                    <p>${strategy.description}</p>
+                    <div>
+                        <button class="btn-start" onclick="startStrategy('${strategy.id}')"
+                                id="start-${strategy.id}"
+                                ${strategy.status === 'running' ? 'disabled' : ''}>
+                            ▶️ 启动
+                        </button>
+                        <button class="btn-stop" onclick="stopStrategy('${strategy.id}')"
+                                id="stop-${strategy.id}"
+                                ${strategy.status === 'stopped' ? 'disabled' : ''}>
+                            ⏹️ 停止
+                        </button>
+                        <button class="btn-logs" onclick="toggleLogs('${strategy.id}')">
+                            📋 查看日志
+                        </button>
+                    </div>
+                    <div class="logs" id="logs-${strategy.id}"></div>
+                `;
+
+                container.appendChild(card);
+            });
+        }
+
+        // 启动策略
+        async function startStrategy(strategyId) {
+            try {
+                const response = await fetch(`/api/strategy/${strategyId}/start`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✅ ${data.message}`);
+                    loadStrategies();  // 刷新列表
+                } else {
+                    alert(`❌ ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ 请求失败: ${error.message}`);
+            }
+        }
+
+        // 停止策略
+        async function stopStrategy(strategyId) {
+            if (!confirm('确定要停止这个策略吗？')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/strategy/${strategyId}/stop`, {
+                    method: 'POST'
+                });
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`✅ ${data.message}`);
+                    loadStrategies();  // 刷新列表
+                } else {
+                    alert(`❌ ${data.error}`);
+                }
+            } catch (error) {
+                alert(`❌ 请求失败: ${error.message}`);
+            }
+        }
+
+        // 切换日志显示
+        function toggleLogs(strategyId) {
+            const logsDiv = document.getElementById(`logs-${strategyId}`);
+            if (logsDiv.style.display === 'none' || !logsDiv.style.display) {
+                loadLogs(strategyId);
+                logsDiv.style.display = 'block';
+            } else {
+                logsDiv.style.display = 'none';
+            }
+        }
+
+        // 加载日志
+        async function loadLogs(strategyId) {
+            try {
+                const response = await fetch(`/api/strategy/${strategyId}/logs`);
+                const data = await response.json();
+
+                const logsDiv = document.getElementById(`logs-${strategyId}`);
+                if (data.success && data.logs.length > 0) {
+                    logsDiv.innerHTML = data.logs.map(log =>
+                        `<div class="log-entry">
+                            [${new Date(log.timestamp).toLocaleTimeString()}] ${log.message}
+                        </div>`
+                    ).join('');
+                } else {
+                    logsDiv.innerHTML = '<p>暂无日志</p>';
+                }
+            } catch (error) {
+                console.error('加载日志失败:', error);
+            }
+        }
+
+        // 页面加载时初始化
+        window.onload = () => {
+            loadStrategies();
+            // 每10秒自动刷新策略状态
+            setInterval(loadStrategies, 10000);
+        };
+    </script>
+</body>
+</html>
