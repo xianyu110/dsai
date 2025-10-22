@@ -13,8 +13,9 @@ ENV PYTHONUNBUFFERED=1 \
 # 安装 Python 和系统依赖
 RUN rm -f /etc/apt/apt.conf.d/docker-clean && \
     echo 'APT::Update::Post-Invoke-Success { "true"; };' > /etc/apt/apt.conf.d/99no-post-invoke && \
-    apt-get update -o Acquire::AllowInsecureRepositories=true && \
-    apt-get install -y --no-install-recommends --allow-unauthenticated \
+    chmod 644 /etc/apt/trusted.gpg.d/*.gpg && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
     python3.9 \
     python3-pip \
     python3.9-dev \
