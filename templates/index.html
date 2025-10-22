@@ -30,16 +30,22 @@
             <div class="status-bar" id="statusBar">
                 <span>余额: <strong id="balance">-</strong> USDT</span>
                 <span>总盈亏: <strong id="totalPnl" class="pnl">-</strong> USDT</span>
-                <span>
-                    自动交易:
-                    <strong id="autoTradeStatus" class="status-badge">-</strong>
-                    <button class="toggle-btn" id="autoTradeToggle" onclick="toggleAutoTrade()">
-                        <span id="autoTradeToggleText">启用</span>
-                    </button>
-                </span>
                 <span>更新: <span id="updateTime">-</span></span>
             </div>
         </header>
+
+        <!-- 策略管理区域 -->
+        <section class="strategy-section">
+            <div class="section-header">
+                <h2>🤖 AI策略管理</h2>
+                <button class="action-btn" onclick="refreshStrategies()">🔄 刷新</button>
+            </div>
+            <div class="strategies-grid" id="strategiesGrid">
+                <div style="text-align: center; padding: 40px; color: #94a3b8;">
+                    加载中...
+                </div>
+            </div>
+        </section>
 
         <section class="controls-section">
             <h2>🎮 手动操作</h2>

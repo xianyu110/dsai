@@ -1020,18 +1020,128 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// ==================== 策略管理功能 ====================
+async function loadStrategies() {
+    try {
+        const response = await fetch('/api/strategies');
+        const data = await response.json();
+
+        if (data.success) {
+            displayStrategies(data.strategies);
+        } else {
+            console.error('加载策略失败:', data.error);
+        }
+    } catch (error) {
+        console.error('加载策略请求失败:', error);
+    }
+}
+
+function displayStrategies(strategies) {
+    const container = document.getElementById('strategiesGrid');
+    if (!container) return;
+
+    if (strategies.length === 0) {
+        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8;">暂无可用策略</div>';
+        return;
+    }
+
+    container.innerHTML = strategies.map(strategy => {
+        const isRunning = strategy.status === 'running';
+        const statusClass = isRunning ? 'running' : 'stopped';
+        const statusText = isRunning ? '运行中' : '已停止';
+
+        return `
+            <div class="strategy-card ${statusClass}" id="strategy-${strategy.id}">
+                <div class="strategy-header">
+                    <div class="strategy-name">${strategy.name}</div>
+                    <span class="strategy-status ${statusClass}">${statusText}</span>
+                </div>
+                <p class="strategy-description">${strategy.description}</p>
+                <div class="strategy-actions">
+                    <button class="btn-start"
+                            onclick="startStrategy('${strategy.id}')"
+                            ${isRunning ? 'disabled' : ''}>
+                        ▶️ 启动
+                    </button>
+                    <button class="btn-stop"
+                            onclick="stopStrategy('${strategy.id}')"
+                            ${!isRunning ? 'disabled' : ''}>
+                        ⏹️ 停止
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+async function startStrategy(strategyId) {
+    if (!confirm('确定要启动这个策略吗？')) return;
+
+    try {
+        const response = await fetch(`/api/strategy/${strategyId}/start`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification(`✅ ${data.message}`, 'success');
+            loadStrategies();
+            fetchTradeLogs(); // 刷新日志
+        } else {
+            showNotification(`❌ ${data.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ 请求失败: ${error.message}`, 'error');
+    }
+}
+
+async function stopStrategy(strategyId) {
+    if (!confirm('确定要停止这个策略吗？')) return;
+
+    try {
+        const response = await fetch(`/api/strategy/${strategyId}/stop`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification(`✅ ${data.message}`, 'success');
+            loadStrategies();
+            fetchTradeLogs(); // 刷新日志
+        } else {
+            showNotification(`❌ ${data.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ 请求失败: ${error.message}`, 'error');
+    }
+}
+
+function refreshStrategies() {
+    loadStrategies();
+    showNotification('🔄 策略列表已刷新', 'info');
+}
+
+// 简单的通知函数
+function showNotification(message, type = 'info') {
+    // 可以使用更复杂的通知库，这里简化处理
+    alert(message);
+}
+
 // 初始化
 fetchStatus();
 fetchSpotBalance();
 fetchMarkets();
 fetchLogs();
 fetchTradeLogs();
+loadStrategies(); // 加载策略列表
+
 updateInterval = setInterval(() => {
     fetchStatus();
     fetchSpotBalance();
     fetchMarkets();
     fetchLogs();
     fetchTradeLogs();
+    loadStrategies(); // 定期刷新策略状态
 }, 3000); // 每3秒更新（提高更新频率）
 
 // 独立的价格更新循环（更频繁）
