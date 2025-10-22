@@ -36,14 +36,16 @@ AVAILABLE_STRATEGIES = {
         'description': '基于 DeepSeek AI 的多币种交易策略',
         'script': 'deepseek.py',
         'status': 'stopped',
-        'auto_start': False
+        'auto_start': False,
+        'mode': 'live'  # 实盘
     },
     'reverse_gpt5': {
-        'name': 'GPT-5 反向跟单',
-        'description': 'GPT-5 做多我们做空，GPT-5 做空我们做多',
+        'name': 'GPT-5 反向跟单 [模拟盘]',
+        'description': 'GPT-5 做多我们做空，GPT-5 做空我们做多（安全测试，不真实交易）',
         'script': 'reverse_gpt5.py',
         'status': 'stopped',
-        'auto_start': False
+        'auto_start': False,
+        'mode': 'simulated'  # 模拟盘
     }
 }
 

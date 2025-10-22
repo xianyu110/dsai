@@ -66,13 +66,16 @@ REVERSE_CONFIG = {
     'leverage': 10,     # 杠杆倍数
     'stop_loss_pct': 0.05,  # 止损 5%
     'take_profit_pct': 0.10,  # 止盈 10%
-    'test_mode': False,  # 实盘模式
+    'test_mode': True,  # 🧪 模拟盘模式（安全测试）
     'auto_trade': True,  # 自动交易
+    'initial_balance': 10000,  # 模拟初始资金 10000 USDT
 }
 
 # 全局持仓记录
 positions = {}
 gpt5_last_signals = {}  # 记录 GPT-5 的最后信号
+simulated_balance = REVERSE_CONFIG['initial_balance']  # 模拟账户余额
+trade_history = []  # 交易历史记录
 
 
 def get_gpt5_trading_signal(symbol):
@@ -145,7 +148,9 @@ def reverse_signal(gpt5_signal):
 
 
 def execute_reverse_trade(symbol, reverse_action):
-    """执行反向交易"""
+    """执行反向交易（模拟盘）"""
+    global simulated_balance
+
     try:
         if reverse_action == 'HOLD':
             print(f"⏸️  {symbol}: 观望，不交易")
@@ -158,50 +163,50 @@ def execute_reverse_trade(symbol, reverse_action):
         # 计算交易数量
         amount = REVERSE_CONFIG['amount_usd'] / current_price
 
-        # 设置杠杆
-        try:
-            exchange.set_leverage(REVERSE_CONFIG['leverage'], symbol)
-        except Exception as e:
-            print(f"⚠️  设置杠杆失败 (可能已设置): {e}")
-
         # 平掉现有持仓（如果有）
         if symbol in positions:
             close_position(symbol)
 
-        # 开仓
-        side = 'sell' if reverse_action == 'SHORT' else 'buy'
+        # 模拟盘开仓
+        print(f"🧪 [模拟盘] {symbol} {reverse_action} 开仓")
+        print(f"   价格: ${current_price:.2f}")
+        print(f"   数量: {amount:.4f}")
+        print(f"   保证金: ${REVERSE_CONFIG['amount_usd']} (杠杆{REVERSE_CONFIG['leverage']}x)")
+        print(f"   模拟余额: ${simulated_balance:.2f}")
 
-        if not REVERSE_CONFIG['test_mode']:
-            order = exchange.create_market_order(
-                symbol=symbol,
-                side=side,
-                amount=amount,
-            )
-            print(f"✅ {symbol} {reverse_action} 开仓成功!")
-            print(f"   价格: ${current_price:.2f}")
-            print(f"   数量: {amount:.4f}")
-            print(f"   订单ID: {order['id']}")
+        # 扣除保证金
+        simulated_balance -= REVERSE_CONFIG['amount_usd']
 
-            # 记录持仓
-            positions[symbol] = {
-                'side': reverse_action,
-                'entry_price': current_price,
-                'amount': amount,
-                'order_id': order['id'],
-                'timestamp': datetime.now().isoformat(),
-                'stop_loss': current_price * (1 - REVERSE_CONFIG['stop_loss_pct']) if reverse_action == 'LONG' else current_price * (1 + REVERSE_CONFIG['stop_loss_pct']),
-                'take_profit': current_price * (1 + REVERSE_CONFIG['take_profit_pct']) if reverse_action == 'LONG' else current_price * (1 - REVERSE_CONFIG['take_profit_pct']),
-            }
-        else:
-            print(f"🧪 [测试模式] {symbol} {reverse_action}")
-            print(f"   价格: ${current_price:.2f}, 数量: {amount:.4f}")
+        # 记录持仓
+        positions[symbol] = {
+            'side': reverse_action,
+            'entry_price': current_price,
+            'amount': amount,
+            'margin': REVERSE_CONFIG['amount_usd'],
+            'timestamp': datetime.now().isoformat(),
+            'stop_loss': current_price * (1 - REVERSE_CONFIG['stop_loss_pct']) if reverse_action == 'LONG' else current_price * (1 + REVERSE_CONFIG['stop_loss_pct']),
+            'take_profit': current_price * (1 + REVERSE_CONFIG['take_profit_pct']) if reverse_action == 'LONG' else current_price * (1 - REVERSE_CONFIG['take_profit_pct']),
+        }
+
+        # 记录交易历史
+        trade_history.append({
+            'timestamp': datetime.now().isoformat(),
+            'symbol': symbol,
+            'action': 'OPEN',
+            'side': reverse_action,
+            'price': current_price,
+            'amount': amount,
+            'margin': REVERSE_CONFIG['amount_usd']
+        })
 
     except Exception as e:
         print(f"❌ 交易执行失败: {e}")
 
 
 def close_position(symbol):
-    """平仓"""
+    """平仓（模拟盘）"""
+    global simulated_balance
+
     try:
         if symbol not in positions:
             return
@@ -212,22 +217,34 @@ def close_position(symbol):
 
         # 计算盈亏
         if pos['side'] == 'LONG':
-            pnl_pct = (current_price - pos['entry_price']) / pos['entry_price'] * 100
+            price_change_pct = (current_price - pos['entry_price']) / pos['entry_price']
         else:
-            pnl_pct = (pos['entry_price'] - current_price) / pos['entry_price'] * 100
+            price_change_pct = (pos['entry_price'] - current_price) / pos['entry_price']
 
-        # 平仓
-        side = 'sell' if pos['side'] == 'LONG' else 'buy'
+        # 考虑杠杆的盈亏
+        pnl_pct = price_change_pct * REVERSE_CONFIG['leverage'] * 100
+        pnl_amount = pos['margin'] * price_change_pct * REVERSE_CONFIG['leverage']
 
-        if not REVERSE_CONFIG['test_mode']:
-            order = exchange.create_market_order(
-                symbol=symbol,
-                side=side,
-                amount=pos['amount'],
-            )
-            print(f"🔴 {symbol} 平仓: {pnl_pct:+.2f}%")
-        else:
-            print(f"🧪 [测试模式] {symbol} 平仓: {pnl_pct:+.2f}%")
+        # 归还保证金和盈亏
+        simulated_balance += pos['margin'] + pnl_amount
+
+        print(f"🧪 [模拟盘] {symbol} 平仓")
+        print(f"   开仓价: ${pos['entry_price']:.2f} -> 平仓价: ${current_price:.2f}")
+        print(f"   盈亏: {pnl_pct:+.2f}% (${pnl_amount:+.2f})")
+        print(f"   模拟余额: ${simulated_balance:.2f}")
+
+        # 记录交易历史
+        trade_history.append({
+            'timestamp': datetime.now().isoformat(),
+            'symbol': symbol,
+            'action': 'CLOSE',
+            'side': pos['side'],
+            'entry_price': pos['entry_price'],
+            'exit_price': current_price,
+            'pnl_pct': pnl_pct,
+            'pnl_amount': pnl_amount,
+            'balance': simulated_balance
+        })
 
         # 删除持仓记录
         del positions[symbol]
@@ -265,9 +282,13 @@ def check_stop_loss_take_profit():
 
 def run_reverse_strategy():
     """运行反向跟单策略"""
+    global simulated_balance
+
     print("=" * 60)
-    print("🔄 GPT-5 反向跟单策略启动")
+    print("🔄 GPT-5 反向跟单策略 [模拟盘]")
     print(f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"💰 模拟余额: ${simulated_balance:.2f} USDT")
+    print(f"📊 总交易次数: {len(trade_history)}")
     print("=" * 60)
 
     # 检查止损止盈
@@ -303,16 +324,33 @@ def run_reverse_strategy():
 
         time.sleep(2)  # 避免API限流
 
-    # 打印当前持仓
-    print(f"\n📦 当前持仓: {len(positions)}")
-    for symbol, pos in positions.items():
-        ticker = exchange.fetch_ticker(symbol)
-        current_price = ticker['last']
-        if pos['side'] == 'LONG':
-            pnl_pct = (current_price - pos['entry_price']) / pos['entry_price'] * 100
-        else:
-            pnl_pct = (pos['entry_price'] - current_price) / pos['entry_price'] * 100
-        print(f"   {symbol}: {pos['side']} @ ${pos['entry_price']:.2f} -> ${current_price:.2f} ({pnl_pct:+.2f}%)")
+    # 打印模拟盘统计
+    print(f"\n" + "=" * 60)
+    print(f"📊 模拟盘统计")
+    print(f"💰 当前余额: ${simulated_balance:.2f} USDT")
+    print(f"📈 总盈亏: ${simulated_balance - REVERSE_CONFIG['initial_balance']:+.2f} ({(simulated_balance / REVERSE_CONFIG['initial_balance'] - 1) * 100:+.2f}%)")
+    print(f"📦 当前持仓: {len(positions)}")
+
+    # 打印当前持仓详情
+    if positions:
+        print(f"\n持仓详情:")
+        total_unrealized_pnl = 0
+        for symbol, pos in positions.items():
+            ticker = exchange.fetch_ticker(symbol)
+            current_price = ticker['last']
+            if pos['side'] == 'LONG':
+                price_change = (current_price - pos['entry_price']) / pos['entry_price']
+            else:
+                price_change = (pos['entry_price'] - current_price) / pos['entry_price']
+
+            unrealized_pnl = pos['margin'] * price_change * REVERSE_CONFIG['leverage']
+            total_unrealized_pnl += unrealized_pnl
+
+            print(f"   {symbol}: {pos['side']} @ ${pos['entry_price']:.2f} -> ${current_price:.2f}")
+            print(f"      未实现盈亏: ${unrealized_pnl:+.2f} ({price_change * REVERSE_CONFIG['leverage'] * 100:+.2f}%)")
+
+        print(f"\n💵 总未实现盈亏: ${total_unrealized_pnl:+.2f}")
+        print(f"💼 账户总价值: ${simulated_balance + sum(pos['margin'] for pos in positions.values()) + total_unrealized_pnl:.2f}")
 
     print("\n" + "=" * 60)
 
@@ -320,13 +358,15 @@ def run_reverse_strategy():
 if __name__ == "__main__":
     print("""
     ╔══════════════════════════════════════════════════════════╗
-    ║         GPT-5 反向跟单策略 Reverse Copy Trading         ║
+    ║       GPT-5 反向跟单策略 [模拟盘] Simulated Trading     ║
     ║                                                          ║
     ║  策略逻辑: GPT-5 做多 → 我们做空                       ║
     ║           GPT-5 做空 → 我们做多                       ║
     ║           GPT-5 观望 → 我们观望                       ║
     ║                                                          ║
-    ║  ⚠️  风险提示: 反向跟单存在高风险，请谨慎使用！         ║
+    ║  🧪 模拟盘模式: 安全测试，不会真实交易                  ║
+    ║  💰 初始资金: $10,000 USDT                              ║
+    ║  📊 杠杆倍数: 10x                                       ║
     ╚══════════════════════════════════════════════════════════╝
     """)
 
@@ -337,3 +377,9 @@ if __name__ == "__main__":
             time.sleep(300)  # 每5分钟运行一次
     except KeyboardInterrupt:
         print("\n\n👋 策略已停止")
+        print(f"\n📊 最终统计:")
+        print(f"   初始资金: ${REVERSE_CONFIG['initial_balance']:.2f}")
+        print(f"   最终余额: ${simulated_balance:.2f}")
+        print(f"   总盈亏: ${simulated_balance - REVERSE_CONFIG['initial_balance']:+.2f} ({(simulated_balance / REVERSE_CONFIG['initial_balance'] - 1) * 100:+.2f}%)")
+        print(f"   交易次数: {len(trade_history)}")
+
