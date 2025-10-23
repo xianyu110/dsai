@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>持仓显示调试页面</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+            margin: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #67eaca;
+            margin-bottom: 20px;
+        }
+        .section {
+            background: #16213e;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            border: 1px solid #0f3460;
+        }
+        .section h2 {
+            color: #67eaca;
+            margin-top: 0;
+            border-bottom: 2px solid #0f3460;
+            padding-bottom: 10px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 10px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        pre {
+            background: #0a0e27;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+            border: 1px solid #1e3a5f;
+        }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 3px;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+        .success {
+            background: #10b981;
+            color: white;
+        }
+        .error {
+            background: #ef4444;
+            color: white;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #0f3460;
+        }
+        th {
+            background: #0f3460;
+            color: #67eaca;
+            font-weight: 600;
+        }
+        tr:hover {
+            background: #1a2a4e;
+        }
+        .log {
+            background: #0a0e27;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            border-left: 3px solid #3b82f6;
+        }
+        .timestamp {
+            color: #94a3b8;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 持仓显示调试页面</h1>
+
+        <div class="section">
+            <h2>1️⃣ 测试登录状态</h2>
+            <button onclick="testLogin()">🔐 测试登录</button>
+            <div id="loginStatus" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="section">
+            <h2>2️⃣ 测试 API 接口</h2>
+            <button onclick="testStatusAPI()">📊 获取 /api/status</button>
+            <button onclick="testWithCurl()">🔄 使用 cURL 测试</button>
+            <div id="apiStatus" style="margin-top: 15px;"></div>
+        </div>
+
+        <div class="section">
+            <h2>3️⃣ 原始 API 响应</h2>
+            <pre id="rawResponse">点击上方按钮测试 API...</pre>
+        </div>
+
+        <div class="section">
+            <h2>4️⃣ 持仓数据解析</h2>
+            <div id="positionsTable"></div>
+        </div>
+
+        <div class="section">
+            <h2>5️⃣ 浏览器环境信息</h2>
+            <div id="browserInfo"></div>
+        </div>
+
+        <div class="section">
+            <h2>6️⃣ 操作日志</h2>
+            <div id="logContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        const logs = [];
+
+        function addLog(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            logs.unshift({timestamp, message, type});
+            updateLogs();
+        }
+
+        function updateLogs() {
+            const container = document.getElementById('logContainer');
+            container.innerHTML = logs.slice(0, 20).map(log => `
+                <div class="log">
+                    <span class="timestamp">${log.timestamp}</span> - ${log.message}
+                </div>
+            `).join('');
+        }
+
+        async function testLogin() {
+            addLog('开始测试登录...');
+            const statusDiv = document.getElementById('loginStatus');
+
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                if (data.success) {
+                    statusDiv.innerHTML = '<span class="status success">✅ 已登录</span>';
+                    addLog('登录状态：已登录', 'success');
+                } else if (data.error === '未登录，请先登录') {
+                    statusDiv.innerHTML = '<span class="status error">❌ 未登录</span><p>请先在主页面登录！</p>';
+                    addLog('登录状态：未登录', 'error');
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<span class="status error">❌ 错误</span><p>${error.message}</p>`;
+                addLog(`登录测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testStatusAPI() {
+            addLog('开始测试 /api/status 接口...');
+            const apiDiv = document.getElementById('apiStatus');
+            const rawDiv = document.getElementById('rawResponse');
+            const positionsDiv = document.getElementById('positionsTable');
+
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                // 显示原始响应
+                rawDiv.textContent = JSON.stringify(data, null, 2);
+
+                if (data.success) {
+                    apiDiv.innerHTML = `
+                        <span class="status success">✅ API 调用成功</span>
+                        <p>余额: ${data.balance} USDT</p>
+                        <p>总盈亏: ${data.total_pnl} USDT</p>
+                        <p>持仓数量: ${data.positions ? data.positions.length : 0}</p>
+                    `;
+                    addLog(`API 调用成功，持仓数量: ${data.positions ? data.positions.length : 0}`, 'success');
+
+                    // 解析持仓数据
+                    if (data.positions && data.positions.length > 0) {
+                        let tableHTML = '<table><thead><tr><th>交易对</th><th>方向</th><th>数量</th><th>入场价</th><th>当前盈亏</th></tr></thead><tbody>';
+                        data.positions.forEach(pos => {
+                            tableHTML += `
+                                <tr>
+                                    <td>${pos.symbol}</td>
+                                    <td>${pos.side === 'long' ? '多' : '空'}</td>
+                                    <td>${pos.size}</td>
+                                    <td>$${pos.entry_price.toFixed(2)}</td>
+                                    <td style="color: ${pos.unrealized_pnl >= 0 ? '#10b981' : '#ef4444'}">${pos.unrealized_pnl.toFixed(2)} USDT</td>
+                                </tr>
+                            `;
+                        });
+                        tableHTML += '</tbody></table>';
+                        positionsDiv.innerHTML = tableHTML;
+                        addLog('持仓数据解析成功', 'success');
+                    } else {
+                        positionsDiv.innerHTML = '<p>没有持仓数据</p>';
+                        addLog('API 返回的持仓列表为空', 'warning');
+                    }
+                } else {
+                    apiDiv.innerHTML = `<span class="status error">❌ API 返回失败</span><p>${data.error}</p>`;
+                    addLog(`API 调用失败: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                apiDiv.innerHTML = `<span class="status error">❌ 请求失败</span><p>${error.message}</p>`;
+                rawDiv.textContent = error.message;
+                addLog(`请求失败: ${error.message}`, 'error');
+            }
+        }
+
+        function testWithCurl() {
+            addLog('显示 cURL 测试命令...');
+            const curlCommand = `curl -s http://localhost:8888/api/status -H "Cookie: session=YOUR_SESSION_COOKIE"`;
+            alert(`请在终端执行以下命令测试：\n\n${curlCommand}\n\n注意：需要替换 YOUR_SESSION_COOKIE 为您的实际 session cookie`);
+        }
+
+        // 显示浏览器环境信息
+        function showBrowserInfo() {
+            const infoDiv = document.getElementById('browserInfo');
+            infoDiv.innerHTML = `
+                <p><strong>浏览器:</strong> ${navigator.userAgent}</p>
+                <p><strong>URL:</strong> ${window.location.href}</p>
+                <p><strong>Cookie:</strong> ${document.cookie || '无'}</p>
+                <p><strong>本地存储:</strong> ${typeof(Storage) !== "undefined" ? '支持' : '不支持'}</p>
+            `;
+        }
+
+        // 页面加载时自动测试
+        window.addEventListener('DOMContentLoaded', function() {
+            showBrowserInfo();
+            addLog('调试页面已加载');
+            testLogin();
+        });
+    </script>
+</body>
+</html>

@@ -72,7 +72,7 @@ AVAILABLE_STRATEGIES = {
         'description': '基于 DeepSeek AI 的多币种交易策略',
         'script': 'deepseek.py',
         'status': 'stopped',
-        'auto_start': False,
+        'auto_start': True,
         'mode': 'live'  # 实盘
     },
     'qwenmax': {
@@ -134,6 +134,11 @@ def index():
 def strategy_demo():
     """策略管理页面"""
     return render_template('strategy_demo.html')
+
+@app.route('/debug')
+def debug():
+    """调试页面"""
+    return render_template('debug.html')
 
 def get_spot_balance():
     """获取现货账户余额"""
@@ -1051,6 +1056,42 @@ if __name__ == '__main__':
     ]
     # 只监控存在的文件
     extra_files = [f for f in extra_files if os.path.exists(f)]
+
+    # 自动启动标记为 auto_start 的策略
+    print("🔍 检查自动启动策略...")
+    for strategy_id, strategy_info in AVAILABLE_STRATEGIES.items():
+        if strategy_info.get('auto_start', False):
+            script_path = strategy_info['script']
+            if os.path.exists(script_path):
+                try:
+                    # 跨平台进程启动
+                    is_windows = platform.system() == 'Windows'
+                    python_cmd = 'python' if is_windows else 'python3'
+
+                    if is_windows:
+                        # Windows: 使用CREATE_NEW_PROCESS_GROUP
+                        proc = subprocess.Popen(
+                            [python_cmd, script_path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                        )
+                    else:
+                        # Unix/Linux: 使用setsid
+                        proc = subprocess.Popen(
+                            [python_cmd, script_path],
+                            stdout=subprocess.PIPE,
+                            stderr=subprocess.PIPE,
+                            preexec_fn=os.setsid
+                        )
+
+                    strategy_processes[strategy_id] = proc
+                    strategy_info['status'] = 'running'
+                    print(f"✅ 自动启动策略: {strategy_info['name']} (PID: {proc.pid})")
+                except Exception as e:
+                    print(f"❌ 自动启动策略失败 {strategy_info['name']}: {e}")
+            else:
+                print(f"⚠️  策略文件不存在: {script_path}")
 
     print("🚀 启动AI交易机器人Web界面...")
     print("📡 访问地址: http://localhost:8888")
