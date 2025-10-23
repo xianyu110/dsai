@@ -1059,13 +1059,16 @@ function logout() {
 }
 
 // ==================== 策略管理功能 ====================
+let allStrategies = [];
+
 async function loadStrategies() {
     try {
         const response = await fetch('/api/strategies');
         const data = await response.json();
 
         if (data.success) {
-            displayStrategies(data.strategies);
+            allStrategies = data.strategies;
+            populateStrategySelect();
         } else {
             console.error('加载策略失败:', data.error);
         }
@@ -1074,42 +1077,145 @@ async function loadStrategies() {
     }
 }
 
-function displayStrategies(strategies) {
-    const container = document.getElementById('strategiesGrid');
-    if (!container) return;
+function populateStrategySelect() {
+    const select = document.getElementById('strategySelect');
+    if (!select) return;
 
-    if (strategies.length === 0) {
-        container.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8;">暂无可用策略</div>';
+    // 保存当前选择的值
+    const currentValue = select.value;
+
+    // 清空并重新填充选项
+    select.innerHTML = '<option value="">选择策略...</option>';
+
+    allStrategies.forEach(strategy => {
+        const option = document.createElement('option');
+        option.value = strategy.id;
+        option.textContent = `${strategy.name} [${strategy.status === 'running' ? '运行中' : '已停止'}]`;
+        option.dataset.status = strategy.status;
+        select.appendChild(option);
+    });
+
+    // 恢复之前的选择
+    if (currentValue && allStrategies.find(s => s.id === currentValue)) {
+        select.value = currentValue;
+        updateStrategyInfo(currentValue);
+    }
+
+    // 添加选择变化监听器
+    select.onchange = function() {
+        updateStrategyInfo(this.value);
+    };
+}
+
+function updateStrategyInfo(strategyId) {
+    const infoContainer = document.getElementById('strategyInfo');
+    const startBtn = document.getElementById('startStrategyBtn');
+    const stopBtn = document.getElementById('stopStrategyBtn');
+
+    if (!strategyId) {
+        infoContainer.innerHTML = '<div style="text-align: center; padding: 40px; color: #94a3b8;">请选择一个策略</div>';
+        startBtn.disabled = true;
+        stopBtn.disabled = true;
         return;
     }
 
-    container.innerHTML = strategies.map(strategy => {
-        const isRunning = strategy.status === 'running';
-        const statusClass = isRunning ? 'running' : 'stopped';
-        const statusText = isRunning ? '运行中' : '已停止';
+    const strategy = allStrategies.find(s => s.id === strategyId);
+    if (!strategy) return;
 
-        return `
-            <div class="strategy-card ${statusClass}" id="strategy-${strategy.id}">
-                <div class="strategy-header">
-                    <div class="strategy-name">${strategy.name}</div>
-                    <span class="strategy-status ${statusClass}">${statusText}</span>
-                </div>
-                <p class="strategy-description">${strategy.description}</p>
-                <div class="strategy-actions">
-                    <button class="btn-start"
-                            onclick="startStrategy('${strategy.id}')"
-                            ${isRunning ? 'disabled' : ''}>
-                        ▶️ 启动
-                    </button>
-                    <button class="btn-stop"
-                            onclick="stopStrategy('${strategy.id}')"
-                            ${!isRunning ? 'disabled' : ''}>
-                        ⏹️ 停止
-                    </button>
-                </div>
+    const isRunning = strategy.status === 'running';
+    startBtn.disabled = isRunning;
+    stopBtn.disabled = !isRunning;
+
+    const modeText = strategy.mode === 'live' ? '🔴 实盘' : '🟡 模拟盘';
+    const statusBadge = isRunning ?
+        '<span class="strategy-status-badge running">运行中</span>' :
+        '<span class="strategy-status-badge stopped">已停止</span>';
+
+    infoContainer.innerHTML = `
+        <div class="strategy-details">
+            <div class="strategy-detail-item">
+                <span class="strategy-detail-label">策略名称</span>
+                <span class="strategy-detail-value">${strategy.name}</span>
             </div>
-        `;
-    }).join('');
+            <div class="strategy-detail-item">
+                <span class="strategy-detail-label">策略描述</span>
+                <span class="strategy-detail-value">${strategy.description}</span>
+            </div>
+            <div class="strategy-detail-item">
+                <span class="strategy-detail-label">运行模式</span>
+                <span class="strategy-detail-value">${modeText}</span>
+            </div>
+            <div class="strategy-detail-item">
+                <span class="strategy-detail-label">当前状态</span>
+                ${statusBadge}
+            </div>
+            <div class="strategy-detail-item">
+                <span class="strategy-detail-label">策略文件</span>
+                <span class="strategy-detail-value">${strategy.script}</span>
+            </div>
+        </div>
+    `;
+}
+
+function getSelectedStrategy() {
+    const select = document.getElementById('strategySelect');
+    return select ? select.value : null;
+}
+
+async function startSelectedStrategy() {
+    const strategyId = getSelectedStrategy();
+    if (!strategyId) {
+        alert('请先选择一个策略');
+        return;
+    }
+
+    const strategy = allStrategies.find(s => s.id === strategyId);
+    if (!confirm(`确定要启动「${strategy.name}」吗？`)) return;
+
+    try {
+        const response = await fetch(`/api/strategy/${strategyId}/start`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification(`✅ ${data.message}`, 'success');
+            loadStrategies();
+            fetchTradeLogs();
+        } else {
+            showNotification(`❌ ${data.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ 请求失败: ${error.message}`, 'error');
+    }
+}
+
+async function stopSelectedStrategy() {
+    const strategyId = getSelectedStrategy();
+    if (!strategyId) {
+        alert('请先选择一个策略');
+        return;
+    }
+
+    const strategy = allStrategies.find(s => s.id === strategyId);
+    if (!confirm(`确定要停止「${strategy.name}」吗？`)) return;
+
+    try {
+        const response = await fetch(`/api/strategy/${strategyId}/stop`, {
+            method: 'POST'
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            showNotification(`✅ ${data.message}`, 'success');
+            loadStrategies();
+            fetchTradeLogs();
+        } else {
+            showNotification(`❌ ${data.error}`, 'error');
+        }
+    } catch (error) {
+        showNotification(`❌ 请求失败: ${error.message}`, 'error');
+    }
 }
 
 async function startStrategy(strategyId) {

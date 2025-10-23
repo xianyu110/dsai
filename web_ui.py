@@ -1,6 +1,8 @@
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import json
 import os
+import sys
+import platform
 import ccxt
 from datetime import datetime
 from dotenv import load_dotenv
@@ -69,6 +71,14 @@ AVAILABLE_STRATEGIES = {
         'name': 'DeepSeek AI 策略',
         'description': '基于 DeepSeek AI 的多币种交易策略',
         'script': 'deepseek.py',
+        'status': 'stopped',
+        'auto_start': False,
+        'mode': 'live'  # 实盘
+    },
+    'qwenmax': {
+        'name': 'QwenMax AI 策略',
+        'description': '基于通义千问 QwenMax 的智能交易策略',
+        'script': 'qwenmax_strategy.py',
         'status': 'stopped',
         'auto_start': False,
         'mode': 'live'  # 实盘
@@ -891,12 +901,26 @@ def start_strategy(strategy_id):
         if not os.path.exists(script_path):
             return jsonify({'success': False, 'error': f'策略文件不存在: {script_path}'})
 
-        proc = subprocess.Popen(
-            ['python3', script_path],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            preexec_fn=os.setsid  # 创建新的进程组
-        )
+        # 跨平台进程启动
+        is_windows = platform.system() == 'Windows'
+        python_cmd = 'python' if is_windows else 'python3'
+
+        if is_windows:
+            # Windows: 使用CREATE_NEW_PROCESS_GROUP
+            proc = subprocess.Popen(
+                [python_cmd, script_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+            )
+        else:
+            # Unix/Linux: 使用setsid
+            proc = subprocess.Popen(
+                [python_cmd, script_path],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                preexec_fn=os.setsid
+            )
 
         strategy_processes[strategy_id] = proc
         strategy['status'] = 'running'
@@ -928,16 +952,30 @@ def stop_strategy(strategy_id):
             return jsonify({'success': False, 'error': '策略未在运行'})
 
         proc = strategy_processes[strategy_id]
+        is_windows = platform.system() == 'Windows'
 
-        # 尝试优雅地终止进程
+        # 跨平台终止进程
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            time.sleep(2)
-
-            # 如果还没停止，强制终止
-            if proc.poll() is None:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-        except:
+            if is_windows:
+                # Windows: 使用taskkill或直接terminate
+                proc.terminate()
+                time.sleep(2)
+                if proc.poll() is None:
+                    proc.kill()
+            else:
+                # Unix/Linux: 使用进程组终止
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    time.sleep(2)
+                    if proc.poll() is None:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except:
+                    proc.terminate()
+                    time.sleep(1)
+                    if proc.poll() is None:
+                        proc.kill()
+        except Exception as e:
+            # 最后的备用方案
             proc.terminate()
             time.sleep(1)
             if proc.poll() is None:

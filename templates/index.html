@@ -41,11 +41,22 @@
         <section class="strategy-section">
             <div class="section-header">
                 <h2>🤖 AI策略管理</h2>
-                <button class="action-btn" onclick="refreshStrategies()">🔄 刷新</button>
+                <div class="strategy-controls">
+                    <select id="strategySelect" class="strategy-select">
+                        <option value="">选择策略...</option>
+                    </select>
+                    <button class="action-btn success" onclick="startSelectedStrategy()" id="startStrategyBtn">
+                        ▶️ 启动
+                    </button>
+                    <button class="action-btn danger" onclick="stopSelectedStrategy()" id="stopStrategyBtn">
+                        ⏹️ 停止
+                    </button>
+                    <button class="action-btn" onclick="refreshStrategies()">🔄 刷新</button>
+                </div>
             </div>
-            <div class="strategies-grid" id="strategiesGrid">
+            <div class="strategy-info" id="strategyInfo">
                 <div style="text-align: center; padding: 40px; color: #94a3b8;">
-                    加载中...
+                    请选择一个策略
                 </div>
             </div>
         </section>
