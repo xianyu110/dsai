@@ -212,23 +212,49 @@ def get_spot_balance_api():
 def get_status():
     """获取整体状态"""
     try:
-        balance = exchange.fetch_balance()
-        usdt_balance = balance['USDT']['free']
-
-        # 获取所有持仓(支持多持仓)
+        # 初始化默认值
+        usdt_balance = 0
         all_positions = []
         total_pnl = 0
-        for symbol in TRADE_CONFIG['symbols']:
-            pos = get_current_position(symbol)
-            if pos:
-                # 处理单个持仓或多个持仓
-                if isinstance(pos, list):
-                    for p in pos:
-                        all_positions.append(p)
-                        total_pnl += p['unrealized_pnl']
-                else:
-                    all_positions.append(pos)
-                    total_pnl += pos['unrealized_pnl']
+
+        # 尝试获取余额
+        try:
+            balance = exchange.fetch_balance()
+            usdt_balance = balance['USDT']['free']
+            print(f"[DEBUG] 成功获取余额: {usdt_balance} USDT")
+        except Exception as e:
+            print(f"[ERROR] 获取余额失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+        # 尝试获取所有持仓(支持多持仓)
+        try:
+            for symbol in TRADE_CONFIG['symbols']:
+                try:
+                    pos = get_current_position(symbol)
+                    if pos:
+                        # 处理单个持仓或多个持仓
+                        if isinstance(pos, list):
+                            for p in pos:
+                                all_positions.append(p)
+                                total_pnl += p.get('unrealized_pnl', 0)
+                                print(f"[DEBUG] 找到持仓: {p['symbol']} {p['side']} {p['size']}")
+                        else:
+                            all_positions.append(pos)
+                            total_pnl += pos.get('unrealized_pnl', 0)
+                            print(f"[DEBUG] 找到持仓: {pos['symbol']} {pos['side']} {pos['size']}")
+                    else:
+                        print(f"[DEBUG] {symbol} 无持仓")
+                except Exception as e:
+                    print(f"[ERROR] 获取{symbol}持仓失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+        except Exception as e:
+            print(f"[ERROR] 获取持仓循环失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+        print(f"[DEBUG] 总持仓数量: {len(all_positions)}, 总盈亏: {total_pnl}")
 
         return jsonify({
             'success': True,
@@ -240,6 +266,9 @@ def get_status():
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
+        print(f"[ERROR] get_status 完全失败: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
 def auto_trade_worker():
