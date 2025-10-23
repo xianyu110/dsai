@@ -1051,6 +1051,13 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// 登出功能
+function logout() {
+    if (confirm('确认要退出登录吗？')) {
+        window.location.href = '/logout';
+    }
+}
+
 // ==================== 策略管理功能 ====================
 async function loadStrategies() {
     try {

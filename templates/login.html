@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔐 管理员登录 - AI交易机器人</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='grad' x1='0%25' y1='0%25' x2='100%25' y2='100%25'><stop offset='0%25' style='stop-color:%2367eaca;stop-opacity:1'/><stop offset='100%25' style='stop-color:%233b82f6;stop-opacity:1'/></linearGradient></defs><circle cx='50' cy='50' r='45' fill='url(%23grad)'/><path d='M 35 40 Q 35 35 40 35 L 45 35 Q 50 35 50 40 L 50 50 Q 50 55 45 55 L 40 55 Q 35 55 35 50 Z M 50 40 Q 50 35 55 35 L 60 35 Q 65 35 65 40 L 65 50 Q 65 55 60 55 L 55 55 Q 50 55 50 50 Z M 30 65 Q 40 70 50 70 Q 60 70 70 65' fill='none' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>">
+    <link rel="stylesheet" href="/static/css/login.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="login-box">
+            <div class="login-header">
+                <div class="logo">🤖</div>
+                <h1>AI交易机器人</h1>
+                <p>管理员登录</p>
+            </div>
+
+            <form id="loginForm" onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="password">
+                        <span class="label-icon">🔒</span>
+                        管理员密码
+                    </label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        placeholder="请输入管理员密码"
+                        required
+                        autofocus
+                    >
+                </div>
+
+                <div class="error-message" id="errorMessage"></div>
+
+                <button type="submit" class="login-btn" id="loginBtn">
+                    <span class="btn-text">登录</span>
+                    <span class="btn-icon">→</span>
+                </button>
+            </form>
+
+            <div class="login-footer">
+                <p>🔐 安全提示：请妥善保管您的管理员密码</p>
+                <p class="hint">默认密码：admin123（请在.env文件中修改ADMIN_PASSWORD）</p>
+            </div>
+        </div>
+
+        <div class="background-animation">
+            <div class="circle circle-1"></div>
+            <div class="circle circle-2"></div>
+            <div class="circle circle-3"></div>
+        </div>
+    </div>
+
+    <script>
+        async function handleLogin(event) {
+            event.preventDefault();
+
+            const password = document.getElementById('password').value;
+            const loginBtn = document.getElementById('loginBtn');
+            const errorMessage = document.getElementById('errorMessage');
+
+            // 禁用按钮
+            loginBtn.disabled = true;
+            loginBtn.innerHTML = '<span class="btn-text">登录中...</span>';
+            errorMessage.textContent = '';
+
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ password })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 登录成功
+                    loginBtn.innerHTML = '<span class="btn-text">✓ 登录成功</span>';
+                    loginBtn.classList.add('success');
+
+                    // 延迟跳转
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 500);
+                } else {
+                    // 登录失败
+                    errorMessage.textContent = result.error || '登录失败';
+                    loginBtn.disabled = false;
+                    loginBtn.innerHTML = '<span class="btn-text">登录</span><span class="btn-icon">→</span>';
+
+                    // 震动效果
+                    document.getElementById('loginForm').classList.add('shake');
+                    setTimeout(() => {
+                        document.getElementById('loginForm').classList.remove('shake');
+                    }, 500);
+                }
+            } catch (error) {
+                errorMessage.textContent = '网络错误，请重试';
+                loginBtn.disabled = false;
+                loginBtn.innerHTML = '<span class="btn-text">登录</span><span class="btn-icon">→</span>';
+            }
+        }
+
+        // Enter键提交
+        document.getElementById('password').addEventListener('keypress', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                document.getElementById('loginForm').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>

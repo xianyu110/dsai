@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 import json
 import os
 import ccxt
@@ -9,6 +9,7 @@ import time
 from collections import deque
 import subprocess
 import signal
+from functools import wraps
 
 load_dotenv()
 from deepseek import (
@@ -18,6 +19,39 @@ from deepseek import (
 )
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'dsai-trading-bot-secret-key-2025')  # Session密钥
+
+# 管理员密码
+ADMIN_PASSWORD = os.getenv('ADMIN_PASSWORD', 'admin123')
+
+# 登录验证装饰器
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('logged_in'):
+            if request.path.startswith('/api/'):
+                return jsonify({'success': False, 'error': '未登录，请先登录'}), 401
+            return redirect(url_for('login'))
+        return f(*args, **kwargs)
+    return decorated_function
+
+# 统一API访问控制
+@app.before_request
+def check_login():
+    """在每个请求前检查登录状态"""
+    # 登录页面和登录API不需要验证
+    if request.path in ['/login', '/logout']:
+        return None
+
+    # 静态文件不需要验证
+    if request.path.startswith('/static/'):
+        return None
+
+    # 其他所有页面和API都需要登录
+    if not session.get('logged_in'):
+        if request.path.startswith('/api/'):
+            return jsonify({'success': False, 'error': '未登录，请先登录'}), 401
+        return redirect(url_for('login'))
 
 # 自动交易线程控制
 auto_trade_thread = None
@@ -57,6 +91,31 @@ AVAILABLE_STRATEGIES = {
     }
 }
 
+# ==================== 登录相关路由 ====================
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    """登录页面"""
+    if request.method == 'POST':
+        data = request.json
+        password = data.get('password', '')
+
+        if password == ADMIN_PASSWORD:
+            session['logged_in'] = True
+            session.permanent = True  # 使用持久化session
+            return jsonify({'success': True, 'message': '登录成功'})
+        else:
+            return jsonify({'success': False, 'error': '密码错误'})
+
+    # GET请求返回登录页面
+    return render_template('login.html')
+
+@app.route('/logout')
+def logout():
+    """登出"""
+    session.pop('logged_in', None)
+    return redirect(url_for('login'))
+
+# ==================== 主页面路由（需要登录） ====================
 @app.route('/')
 def index():
     return render_template('index.html')
