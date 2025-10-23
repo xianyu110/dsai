@@ -247,18 +247,40 @@ def get_current_position(symbol):
             if base_symbol != symbol:
                 continue
 
-            contracts = float(pos.get('contracts', 0))
+            # 获取持仓数量 - 支持多种字段格式
+            position_amt = 0
+            info = pos.get('info', {})
 
-            if contracts > 0:  # 有持仓
-                # OKX使用info.posSide区分多空
-                pos_side = pos.get('info', {}).get('posSide', '')
-                if EXCHANGE_TYPE == 'okx':
-                    side = 'long' if pos_side == 'long' else ('short' if pos_side == 'short' else 'net')
-                else:  # binance
-                    side = pos.get('side', 'long')  # binance直接返回side
+            # 优先使用 positionAmt（Binance和部分OKX返回）
+            if 'positionAmt' in info:
+                position_amt = float(info['positionAmt'])
+                print(f"[DEBUG] {symbol} 使用 positionAmt: {position_amt}")
+            elif 'contracts' in pos:
+                # 使用 contracts 字段，根据 side 确定方向
+                contracts = float(pos['contracts'])
+                if contracts > 0:
+                    # OKX使用info.posSide区分多空
+                    pos_side = info.get('posSide', '')
+                    if pos_side == 'short':
+                        position_amt = -contracts
+                    else:
+                        position_amt = contracts
+                print(f"[DEBUG] {symbol} 使用 contracts: {contracts}, posSide: {pos_side}, position_amt: {position_amt}")
 
-                # 获取OKX的额外信息
-                info = pos.get('info', {})
+            print(f"[DEBUG] {symbol} 最终持仓量: {position_amt}")
+
+            if position_amt != 0:  # 有持仓（多头为正，空头为负）
+                # 根据 position_amt 的正负确定方向
+                side = 'long' if position_amt > 0 else 'short'
+
+                # 如果交易所明确返回了方向，使用交易所返回的值
+                pos_side = info.get('posSide', '')
+                if EXCHANGE_TYPE == 'okx' and pos_side:
+                    side = 'long' if pos_side == 'long' else ('short' if pos_side == 'short' else side)
+                elif 'side' in pos and pos['side']:
+                    side = pos['side']
+
+                print(f"[DEBUG] {symbol} 持仓方向: {side}")
 
                 # 获取保证金 (OKX返回的可能是币本位，需要转换)
                 # 安全转换浮点数，处理空字符串
@@ -294,7 +316,7 @@ def get_current_position(symbol):
                 position_data = {
                     'symbol': symbol,
                     'side': side,
-                    'size': contracts,
+                    'size': abs(position_amt),  # 使用持仓数量的绝对值
                     'entry_price': float(pos.get('entryPrice', 0)),
                     'unrealized_pnl': float(pos.get('unrealizedPnl', 0)),
                     'leverage': leverage,
@@ -302,11 +324,14 @@ def get_current_position(symbol):
                     'liquidation_price': float(pos.get('liquidationPrice', 0) or 0),  # 强平价
                     'margin_ratio': float(info.get('mgnRatio', 0)),  # 保证金率
                     'notional': notional_usd,  # USDT计价的名义价值
+                    'position_amt': position_amt,  # 原始持仓量（带符号）
                 }
                 result_positions.append(position_data)
+                print(f"[DEBUG] {symbol} 添加持仓: {side} {abs(position_amt)} @ ${float(pos.get('entryPrice', 0))}")
 
         # 如果有多个持仓,返回列表;如果只有一个,返回单个对象;如果没有,返回None
         if len(result_positions) == 0:
+            print(f"[DEBUG] {symbol} 未找到有效持仓")
             return None
         elif len(result_positions) == 1:
             return result_positions[0]

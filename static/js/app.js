@@ -452,6 +452,9 @@ async function triggerAnalysis() {
     const symbol = document.getElementById('analysisSymbol').value;
     const btn = document.getElementById('analysisBtn');
 
+    // 询问用户是否自动执行交易
+    const autoExecute = confirm('是否在分析后自动执行交易？\n\n点击"确定"：分析并自动下单\n点击"取消"：仅分析不下单');
+
     // 禁用按钮，显示加载状态
     const originalText = btn.innerHTML;
     btn.disabled = true;
@@ -461,13 +464,21 @@ async function triggerAnalysis() {
         const response = await fetch('/api/analysis', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({symbol})
+            body: JSON.stringify({symbol, auto_execute: autoExecute})
         });
 
         const result = await response.json();
 
         if (result.success) {
-            alert(`${result.message}\n信号: ${result.signal_data.signal}\n理由: ${result.signal_data.reason}\n信心: ${result.signal_data.confidence}`);
+            let message = `${result.message}\n信号: ${result.signal_data.signal}\n理由: ${result.signal_data.reason}\n信心: ${result.signal_data.confidence}`;
+
+            if (result.trade_executed) {
+                message += `\n\n✅ 交易已执行: ${result.trade_message}`;
+            } else if (autoExecute && result.signal_data.signal === 'HOLD') {
+                message += '\n\n⏸️ 信号为HOLD，未执行交易';
+            }
+
+            alert(message);
 
             // 刷新数据显示
             fetchStatus();
@@ -488,25 +499,36 @@ async function triggerAnalysis() {
 async function triggerAllAnalysis() {
     const symbols = ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT', 'BNB/USDT'];
 
+    // 第一个确认对话框：是否进行分析
     if (!confirm('确认对所有币种进行AI分析？这可能需要一些时间。')) {
         return;
     }
 
+    // 第二个确认对话框：是否自动执行交易
+    const autoExecute = confirm('是否在分析后自动执行交易？\n\n点击"确定"：分析并自动下单\n点击"取消"：仅分析不下单');
+
     let successCount = 0;
     let failCount = 0;
+    let tradeCount = 0;
+    let tradeResults = [];
 
     for (const symbol of symbols) {
         try {
             const response = await fetch('/api/analysis', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({symbol})
+                body: JSON.stringify({symbol, auto_execute: autoExecute})
             });
 
             const result = await response.json();
             if (result.success) {
                 successCount++;
                 console.log(`${symbol} 分析完成: ${result.signal_data.signal}`);
+
+                if (result.trade_executed) {
+                    tradeCount++;
+                    tradeResults.push(`${symbol}: ${result.signal_data.signal} - ${result.trade_message}`);
+                }
             } else {
                 failCount++;
                 console.error(`${symbol} 分析失败: ${result.error}`);
@@ -520,7 +542,16 @@ async function triggerAllAnalysis() {
         await new Promise(resolve => setTimeout(resolve, 500));
     }
 
-    alert(`批量分析完成！\n成功: ${successCount}个币种\n失败: ${failCount}个币种`);
+    let message = `批量分析完成！\n✅ 成功: ${successCount}个币种\n❌ 失败: ${failCount}个币种`;
+
+    if (autoExecute) {
+        message += `\n\n📊 执行交易: ${tradeCount}笔`;
+        if (tradeResults.length > 0) {
+            message += '\n\n交易详情:\n' + tradeResults.join('\n');
+        }
+    }
+
+    alert(message);
 
     // 刷新数据显示
     fetchStatus();

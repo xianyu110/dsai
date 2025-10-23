@@ -242,9 +242,9 @@ def auto_trade_worker():
                 # 避免请求过快
                 time.sleep(2)
 
-            # 等待下一轮(15分钟)
-            print(f"\n⏰ 等待下一轮分析 (15分钟)...")
-            time.sleep(15 * 60)
+            # 等待下一轮(3分钟)
+            print(f"\n⏰ 等待下一轮分析 (3分钟)...")
+            time.sleep(3 * 60)
 
         except Exception as e:
             print(f"❌ 自动交易循环错误: {e}")
@@ -323,6 +323,7 @@ def manual_analysis():
     try:
         data = request.json
         symbol = data.get('symbol')
+        auto_execute = data.get('auto_execute', False)  # 是否自动执行交易
 
         if not symbol:
             return jsonify({'success': False, 'error': '请指定交易对'})
@@ -350,12 +351,37 @@ def manual_analysis():
                     success=True,
                     details={'signal': signal_data['signal'], 'confidence': signal_data['confidence'], 'reason': signal_data.get('reason', '')})
 
+        # 如果启用自动执行，则根据信号执行交易
+        trade_executed = False
+        trade_message = ''
+        if auto_execute and signal_data['signal'] in ['BUY', 'SELL']:
+            try:
+                trade_events = execute_trade(signal_data, price_data) or []
+                for event in trade_events:
+                    event_symbol = event.get('symbol', symbol)
+                    add_trade_log(
+                        event.get('type', 'trade'),
+                        event_symbol,
+                        event.get('action', 'manual_trade'),
+                        event.get('message', ''),
+                        success=event.get('success', True),
+                        details=event.get('details')
+                    )
+                    if event.get('message'):
+                        trade_message += event['message'] + ' '
+                trade_executed = True
+            except Exception as e:
+                trade_message = f'执行交易失败: {str(e)}'
+                add_trade_log('trade', symbol, 'auto_trade', trade_message, success=False)
+
         return jsonify({
             'success': True,
-            'message': f'{symbol} AI分析完成',
+            'message': f'{symbol} AI分析完成' + (f' - {trade_message}' if trade_executed else ''),
             'signal_data': signal_data,
             'price_data': price_data,
             'position': current_position,
+            'trade_executed': trade_executed,
+            'trade_message': trade_message,
             'timestamp': datetime.now().isoformat()
         })
 
