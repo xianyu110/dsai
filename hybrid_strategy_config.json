@@ -1,0 +1,89 @@
+{
+  "strategy_settings": {
+    "name": "DeepSeek + Qwen3 Max 混合策略",
+    "version": "1.0.0",
+    "total_capital": 10000,
+    "allocation": {
+      "deepseek_stable": 0.6,
+      "qwen3_aggressive": 0.4
+    }
+  },
+  "deepseek_config": {
+    "strategy_type": "stable_diversified",
+    "leverage": 10,
+    "symbols": ["BTC/USDT", "ETH/USDT", "SOL/USDT", "DOGE/USDT"],
+    "amount_per_trade": 300,
+    "risk_per_trade": 0.02,
+    "max_positions": 4,
+    "invalidation_levels": {
+      "BTC/USDT": 105000,
+      "ETH/USDT": 3800,
+      "SOL/USDT": 175,
+      "DOGE/USDT": 0.180
+    },
+    "risk_management": {
+      "stop_loss_type": "3m_invalidation",
+      "take_profit_ratio": 1.1,
+      "max_drawdown_threshold": 0.15
+    }
+  },
+  "qwen3_config": {
+    "strategy_type": "aggressive_concentrated",
+    "focus_symbol": "BTC/USDT",
+    "leverage": 20,
+    "amount_per_trade": 400,
+    "risk_per_trade": 0.03,
+    "max_positions": 1,
+    "invalidation_level": 105000,
+    "risk_management": {
+      "stop_loss_type": "4h_trend",
+      "profit_target_ratio": 1.3,
+      "max_drawdown_threshold": 0.20
+    }
+  },
+  "rebalance_settings": {
+    "enabled": true,
+    "rebalance_hours": 24,
+    "deviation_threshold": 0.1,
+    "market_adaptation": {
+      "high_volatility_allocation": {
+        "deepseek": 0.7,
+        "qwen3": 0.3
+      },
+      "strong_trend_allocation": {
+        "deepseek": 0.5,
+        "qwen3": 0.5
+      },
+      "normal_allocation": {
+        "deepseek": 0.6,
+        "qwen3": 0.4
+      }
+    }
+  },
+  "performance_targets": {
+    "annual_return_target": 0.5,
+    "max_drawdown_target": 0.15,
+    "sharpe_ratio_target": 1.5,
+    "win_rate_target": 0.6
+  },
+  "risk_limits": {
+    "max_total_leverage": 2.0,
+    "max_single_position": 0.3,
+    "max_correlation_exposure": 0.6,
+    "emergency_stop_loss": 0.05
+  },
+  "monitoring_settings": {
+    "report_interval_minutes": 3,
+    "alert_thresholds": {
+      "daily_loss_limit": 0.05,
+      "consecutive_losses": 3,
+      "volatility_spike": 0.05
+    }
+  },
+  "execution_settings": {
+    "execution_delay_seconds": 5,
+    "retry_attempts": 3,
+    "slippage_tolerance": 0.001,
+    "market_hours_only": true
+  }
+}

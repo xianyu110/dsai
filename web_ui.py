@@ -20,6 +20,19 @@ from deepseek import (
     analyze_with_ai, execute_trade, EXCHANGE_TYPE
 )
 
+# 导入混合策略
+try:
+    from hybrid_trading_strategy import HybridTradingStrategy
+    HYBRID_STRATEGY_AVAILABLE = True
+    hybrid_strategy = HybridTradingStrategy(total_capital=10000)
+    print("[INFO] 混合策略模块加载成功")
+except Exception as e:
+    HYBRID_STRATEGY_AVAILABLE = False
+    hybrid_strategy = None
+    print(f"[ERROR] 混合策略模块加载失败: {e}")
+    import traceback
+    traceback.print_exc()
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'dsai-trading-bot-secret-key-2025')  # Session密钥
 
@@ -47,6 +60,10 @@ def check_login():
 
     # 静态文件不需要验证
     if request.path.startswith('/static/'):
+        return None
+
+    # 策略日志API不需要验证（用于独立策略进程）
+    if request.path == '/api/log_from_strategy':
         return None
 
     # 其他所有页面和API都需要登录
@@ -420,6 +437,210 @@ def get_history(symbol):
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+# 混合策略API接口
+@app.route('/api/hybrid/status')
+@login_required
+def get_hybrid_status():
+    """获取混合策略状态"""
+    print(f"[DEBUG] 混合策略状态请求 - HYBRID_STRATEGY_AVAILABLE: {HYBRID_STRATEGY_AVAILABLE}")
+
+    if not HYBRID_STRATEGY_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': '混合策略模块未可用'
+        })
+
+    try:
+        print(f"[DEBUG] 获取混合策略实例属性...")
+
+        # 确保所有属性都存在
+        performance = getattr(hybrid_strategy, 'performance', {
+            'total': {'pnl': 0.0, 'trades': 0},
+            'deepseek': {'pnl': 0.0, 'trades': 0, 'sharpe': 0.0},
+            'qwen3': {'pnl': 0.0, 'trades': 0, 'sharpe': 0.0}
+        })
+
+        allocation = getattr(hybrid_strategy, 'allocation', {
+            'deepseek_stable': 0.6,
+            'qwen3_aggressive': 0.4
+        })
+
+        last_rebalance = getattr(hybrid_strategy, 'last_rebalance', None)
+
+        response_data = {
+            'success': True,
+            'available': True,
+            'is_running': True,  # 添加运行状态
+            'total_capital': getattr(hybrid_strategy, 'total_capital', 10000),
+            'allocation': allocation,
+            'deepseek_config': {
+                'symbols': getattr(hybrid_strategy, 'deepseek_config', {}).get('symbols', ['BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'DOGE/USDT']),
+                'leverage': getattr(hybrid_strategy, 'deepseek_config', {}).get('leverage', 10),
+                'amount_per_trade': getattr(hybrid_strategy, 'deepseek_config', {}).get('amount_per_trade', 300)
+            },
+            'qwen3_config': {
+                'focus_symbol': getattr(hybrid_strategy, 'qwen3_config', {}).get('focus_symbol', 'BTC/USDT'),
+                'leverage': getattr(hybrid_strategy, 'qwen3_config', {}).get('leverage', 20),
+                'amount_per_trade': getattr(hybrid_strategy, 'qwen3_config', {}).get('amount_per_trade', 400)
+            },
+            'performance': performance,
+            'last_rebalance': last_rebalance.isoformat() if last_rebalance else None,
+            'last_execution': datetime.now().isoformat(),  # 添加最后执行时间
+            'strategies': {  # 添加策略状态
+                'deepseek': {'is_running': True, 'positions': 0},
+                'qwen3': {'is_running': True, 'positions': 0}
+            }
+        }
+
+        print(f"[DEBUG] 返回混合策略状态数据: {response_data}")
+        return jsonify(response_data)
+    except Exception as e:
+        print(f"[ERROR] 获取混合策略状态失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/hybrid/config', methods=['GET', 'POST'])
+@login_required
+def hybrid_config():
+    """混合策略配置"""
+    if not HYBRID_STRATEGY_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': '混合策略模块未可用'
+        })
+
+    if request.method == 'GET':
+        # 获取当前配置
+        try:
+            return jsonify({
+                'success': True,
+                'config': {
+                    'total_capital': hybrid_strategy.total_capital,
+                    'allocation': hybrid_strategy.allocation,
+                    'deepseek': hybrid_strategy.deepseek_config,
+                    'qwen3': hybrid_strategy.qwen3_config,
+                    'rebalance_hours': hybrid_strategy.rebalance_hours
+                }
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+    elif request.method == 'POST':
+        # 更新配置
+        try:
+            data = request.json
+
+            # 更新资金分配
+            if 'allocation' in data:
+                hybrid_strategy.allocation = data['allocation']
+
+            # 更新DeepSeek配置
+            if 'deepseek' in data:
+                for key, value in data['deepseek'].items():
+                    if key in hybrid_strategy.deepseek_config:
+                        hybrid_strategy.deepseek_config[key] = value
+
+            # 更新Qwen3 Max配置
+            if 'qwen3' in data:
+                for key, value in data['qwen3'].items():
+                    if key in hybrid_strategy.qwen3_config:
+                        hybrid_strategy.qwen3_config[key] = value
+
+            # 更新总资金
+            if 'total_capital' in data:
+                hybrid_strategy.total_capital = data['total_capital']
+
+            # 更新再平衡设置
+            if 'rebalance_hours' in data:
+                hybrid_strategy.rebalance_hours = data['rebalance_hours']
+
+            return jsonify({
+                'success': True,
+                'message': '配置已更新',
+                'config': {
+                    'total_capital': hybrid_strategy.total_capital,
+                    'allocation': hybrid_strategy.allocation,
+                    'deepseek': hybrid_strategy.deepseek_config,
+                    'qwen3': hybrid_strategy.qwen3_config,
+                    'rebalance_hours': hybrid_strategy.rebalance_hours
+                }
+            })
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/hybrid/execute')
+@login_required
+def execute_hybrid_strategy():
+    """执行混合策略"""
+    if not HYBRID_STRATEGY_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': '混合策略模块未可用'
+        })
+
+    try:
+        # 执行混合策略
+        results = []
+
+        # 执行DeepSeek部分
+        for symbol in hybrid_strategy.deepseek_config['symbols']:
+            price_data = get_ohlcv(symbol)
+            if price_data:
+                decision = hybrid_strategy.make_deepseek_decision(symbol, price_data, {})
+                results.append({
+                    'strategy': 'deepseek',
+                    'symbol': symbol,
+                    'decision': decision
+                })
+
+        # 执行Qwen3 Max部分
+        symbol = hybrid_strategy.qwen3_config['focus_symbol']
+        price_data = get_ohlcv(symbol)
+        if price_data:
+            decision = hybrid_strategy.make_qwen3_decision(symbol, price_data, {})
+            results.append({
+                'strategy': 'qwen3',
+                'symbol': symbol,
+                'decision': decision
+            })
+
+        return jsonify({
+            'success': True,
+            'results': results,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/hybrid/rebalance')
+@login_required
+def trigger_rebalance():
+    """触发再平衡"""
+    if not HYBRID_STRATEGY_AVAILABLE:
+        return jsonify({
+            'success': False,
+            'error': '混合策略模块未可用'
+        })
+
+    try:
+        # 执行再平衡
+        if hybrid_strategy.should_rebalance():
+            hybrid_strategy.perform_rebalance()
+            return jsonify({
+                'success': True,
+                'message': '再平衡执行完成',
+                'timestamp': datetime.now().isoformat()
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'message': '当前无需再平衡',
+                'last_rebalance': hybrid_strategy.last_rebalance.isoformat() if hybrid_strategy.last_rebalance else None
+            })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/analysis', methods=['POST'])
 def manual_analysis():
     """手动触发AI分析"""
@@ -530,6 +751,50 @@ def add_trade_log(log_type, symbol, action, message, success=True, details=None)
     }
     trade_logs.append(log_entry)
     print(f"[日志] {log_entry['timestamp']} - {message}")
+
+@app.route('/api/log_from_strategy', methods=['POST'])
+def receive_log_from_strategy():
+    """接收来自独立策略进程的日志"""
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': 'No data received'})
+
+        # 验证必要字段
+        required_fields = ['type', 'symbol', 'action', 'message']
+        for field in required_fields:
+            if field not in data:
+                return jsonify({'success': False, 'error': f'Missing field: {field}'})
+
+        # 添加时间戳（如果策略没有提供）
+        if 'timestamp' not in data:
+            data['timestamp'] = datetime.now().isoformat()
+
+        # 添加到交易日志
+        log_entry = {
+            'timestamp': data['timestamp'],
+            'type': data['type'],  # 'trade', 'analysis', 'system'
+            'symbol': data['symbol'],
+            'action': data['action'],  # 'buy', 'sell', 'close', 'analyze'
+            'message': data['message'],
+            'success': data.get('success', True),
+            'details': data.get('details', {}),
+            'source': 'strategy'  # 标记来自独立策略
+        }
+        trade_logs.append(log_entry)
+
+        print(f"[策略日志] {data['timestamp']} - {data['symbol']} {data['action']}: {data['message']}")
+
+        return jsonify({
+            'success': True,
+            'message': 'Log received successfully',
+            'timestamp': datetime.now().isoformat()
+        })
+
+    except Exception as e:
+        print(f"接收策略日志失败: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
 
 @app.route('/api/logs')
 def get_trade_logs():
@@ -693,6 +958,7 @@ def manual_execute():
         action = data.get('action')  # buy/sell/close
         amount = data.get('amount', TRADE_CONFIG['amount_usd'])
         leverage = data.get('leverage', 5)  # 默认5倍杠杆
+        dry_run = data.get('dry_run', False)  # 是否为模拟模式
 
         # 保存原始symbol用于查询持仓
         original_symbol = symbol
@@ -710,6 +976,17 @@ def manual_execute():
                     # 处理多个持仓的情况
                     positions_to_close = [pos] if not isinstance(pos, list) else pos
 
+                    if dry_run:
+                        # 模拟平仓
+                        for position in positions_to_close:
+                            action_type = "模拟平仓"
+                            add_trade_log('trade', original_symbol, 'close',
+                                        f'{action_type}: {position["side"]}仓 {position["size"]:.6f}',
+                                        success=True,
+                                        details={'dry_run': True, 'size': position['size'], 'side': position['side'], 'pnl': position.get('unrealized_pnl', 0)})
+                        return jsonify({'success': True, 'message': '模拟平仓成功（未实际下单）', 'dry_run': True})
+
+                    # 实际平仓
                     for position in positions_to_close:
                         # OKX双向持仓模式平仓
                         if EXCHANGE_TYPE == 'okx':
@@ -733,7 +1010,7 @@ def manual_execute():
                             add_trade_log('trade', original_symbol, 'close',
                                         f'平仓成功: {position["side"]}仓 {position["size"]:.6f}',
                                         success=True,
-                                        details={'size': position['size'], 'side': position['side'], 'pnl': position.get('unrealized_pnl', 0)})
+                                        details={'dry_run': False, 'size': position['size'], 'side': position['side'], 'pnl': position.get('unrealized_pnl', 0)})
                         else:  # Binance
                             params = {'reduceOnly': True}
                             if position['side'] == 'long':
@@ -743,9 +1020,9 @@ def manual_execute():
                             add_trade_log('trade', original_symbol, 'close',
                                         f'平仓成功: {position["side"]}仓 {position["size"]:.6f}',
                                         success=True,
-                                        details={'size': position['size'], 'side': position['side'], 'pnl': position.get('unrealized_pnl', 0)})
+                                        details={'dry_run': False, 'size': position['size'], 'side': position['side'], 'pnl': position.get('unrealized_pnl', 0)})
 
-                    return jsonify({'success': True, 'message': '平仓成功'})
+                    return jsonify({'success': True, 'message': '平仓成功', 'dry_run': False})
                 except Exception as e:
                     add_trade_log('trade', original_symbol, 'close', f'平仓失败: {str(e)}', success=False)
                     return jsonify({'success': False, 'error': f'平仓失败: {str(e)}'})
@@ -780,6 +1057,15 @@ def manual_execute():
             # 合约开多仓 - 使用限价单，价格稍高于当前价以确保成交
             limit_price = current_price * 1.001  # 当前价+0.1%
             try:
+                if dry_run:
+                    # 模拟开多仓
+                    add_trade_log('trade', original_symbol, 'buy',
+                                f'模拟开多: {amount_contracts:.4f}张 @ ${limit_price:.2f}',
+                                success=True,
+                                details={'dry_run': True, 'amount': amount_contracts, 'price': limit_price, 'leverage': leverage})
+                    return jsonify({'success': True, 'message': f'模拟开多成功（逐仓{leverage}x，未实际下单）', 'dry_run': True, 'contracts': amount_contracts, 'price': limit_price})
+
+                # 实际开多仓
                 if EXCHANGE_TYPE == 'okx':
                     # 设置杠杆（使用用户选择的倍数）
                     try:
@@ -811,8 +1097,8 @@ def manual_execute():
                 add_trade_log('trade', original_symbol, 'buy',
                             f'开多成功: {amount_contracts:.4f}张 @ ${limit_price:.2f}',
                             success=True,
-                            details={'amount': amount_contracts, 'price': limit_price, 'leverage': leverage})
-                return jsonify({'success': True, 'message': f'开多成功（限价单，逐仓{leverage}x）', 'order': order})
+                            details={'dry_run': False, 'amount': amount_contracts, 'price': limit_price, 'leverage': leverage})
+                return jsonify({'success': True, 'message': f'开多成功（限价单，逐仓{leverage}x）', 'order': order, 'dry_run': False})
             except Exception as e:
                 add_trade_log('trade', original_symbol, 'buy', f'开多失败: {str(e)}', success=False)
                 return jsonify({'success': False, 'error': f'开多失败: {str(e)}'})

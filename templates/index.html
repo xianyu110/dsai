@@ -62,8 +62,13 @@
         </section>
 
         <section class="controls-section">
-            <h2>🎮 手动操作</h2>
-            <div class="manual-controls">
+            <div class="section-header">
+                <h2>🎮 手动操作</h2>
+                <button class="collapse-btn" onclick="toggleControls()">
+                    <span id="controlsToggleIcon">▼</span>
+                </button>
+            </div>
+            <div id="controlsContent" class="manual-controls">
                 <div class="manual-trade">
                     <h3>交易操作</h3>
                     <select id="tradeSymbol">
@@ -86,6 +91,14 @@
                     <div class="trade-info" id="tradeInfo">
                         预计开仓: <span id="estimatedContracts">-</span> 张
                     </div>
+                    <div class="execute-control">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="executeTradeCheckbox" checked>
+                            <span class="checkmark"></span>
+                            <span class="checkbox-label">执行下单</span>
+                        </label>
+                        <span class="execute-hint" id="executeHint">勾选后点击按钮将直接下单，取消勾选仅模拟分析</span>
+                    </div>
                     <button onclick="executeTrade('buy')" class="btn btn-long">开多</button>
                     <button onclick="executeTrade('sell')" class="btn btn-short">开空</button>
                     <button onclick="executeTrade('close')" class="btn btn-close">平仓</button>
@@ -99,6 +112,14 @@
                         <option value="DOGE/USDT">DOGE/USDT</option>
                         <option value="BNB/USDT">BNB/USDT</option>
                     </select>
+                    <div class="execute-control">
+                        <label class="checkbox-container">
+                            <input type="checkbox" id="autoExecuteAnalysisCheckbox" checked>
+                            <span class="checkmark"></span>
+                            <span class="checkbox-label">分析后自动下单</span>
+                        </label>
+                        <span class="execute-hint" id="analysisExecuteHint">勾选后分析将自动执行交易信号</span>
+                    </div>
                     <button onclick="triggerAnalysis()" class="btn btn-analysis" id="analysisBtn">
                         🧠 触发AI分析
                     </button>
@@ -112,11 +133,16 @@
         <section class="trade-logs-section">
             <div class="section-header">
                 <h2>📋 交易操作日志</h2>
-                <button class="action-btn" onclick="refreshTradeLogs()">
-                    🔄 刷新
-                </button>
+                <div class="section-actions">
+                    <button class="action-btn" onclick="refreshTradeLogs()">
+                        🔄 刷新
+                    </button>
+                    <button class="collapse-btn" onclick="toggleTradeLogs()">
+                        <span id="tradeLogsToggleIcon">▼</span>
+                    </button>
+                </div>
             </div>
-            <div class="trade-logs-container" id="tradeLogsContainer">
+            <div id="tradeLogsContent" class="trade-logs-container" style="transition: all 0.3s ease;">
                 <div style="text-align: center; padding: 40px; color: #94a3b8;">
                     暂无操作日志
                 </div>
@@ -133,10 +159,13 @@
                     <button class="action-btn-subtle danger" onclick="closeAllPositions()">
                         ⚠️ 一键平仓
                     </button>
+                    <button class="collapse-btn" onclick="togglePositions()">
+                        <span id="positionsToggleIcon">▼</span>
+                    </button>
                 </div>
             </div>
 
-            <div class="table-container">
+            <div id="positionsContent" class="table-container" style="transition: all 0.3s ease;">
                 <table class="orders-table">
                     <thead>
                         <tr>
@@ -149,6 +178,7 @@
                             <th>💰 当前价</th>
                             <th>💎 保证金</th>
                             <th>⚡ 强平价</th>
+                            <th>🏗️ 杠杆倍数</th>
                             <th>📈 盈亏(USDT)</th>
                             <th>📊 24h涨跌</th>
                             <th>📍 状态</th>
@@ -157,7 +187,7 @@
                     </thead>
                     <tbody id="ordersTableBody">
                         <tr>
-                            <td colspan="13" style="text-align: center; padding: 40px; color: #94a3b8;">
+                            <td colspan="14" style="text-align: center; padding: 40px; color: #94a3b8;">
                                 暂无持仓数据
                             </td>
                         </tr>
@@ -167,7 +197,7 @@
         </section>
 
         <div class="positions-container">
-            
+
             <section class="spot-section">
                 <div class="section-header">
                     <h2>💰 现货余额</h2>
@@ -178,6 +208,90 @@
                 <div id="spotGrid" class="grid"></div>
             </section>
         </div>
+
+        <!-- 混合策略状态面板 - 移至底部 -->
+        <section class="hybrid-strategy-section" id="hybridStrategySection" style="display: none;">
+            <div class="section-header">
+                <h2>🚀 混合策略状态</h2>
+                <div class="section-actions">
+                    <button class="action-btn success" onclick="executeHybridStrategy()">
+                        ▶️ 执行混合策略
+                    </button>
+                    <button class="action-btn" onclick="triggerRebalance()">
+                        🔄 手动再平衡
+                    </button>
+                    <button class="action-btn" onclick="refreshHybridStatus()">
+                        🔄 刷新状态
+                    </button>
+                </div>
+            </div>
+
+            <div class="hybrid-status-container">
+                <div class="hybrid-status-card">
+                    <h3>资金配置</h3>
+                    <div class="allocation-display">
+                        <div class="allocation-item">
+                            <div class="label">DeepSeek (60%)</div>
+                            <div class="value">$6,000</div>
+                            <div class="leverage">10x杠杆</div>
+                        </div>
+                        <div class="allocation-item">
+                            <div class="label">Qwen3 Max (40%)</div>
+                            <div class="value">$4,000</div>
+                            <div class="leverage">20x杠杆</div>
+                        </div>
+                    </div>
+                    <div class="rebalance-status">
+                        <span class="status-label">再平衡状态:</span>
+                        <span class="status-value" id="rebalanceStatus">正常</span>
+                        <span class="last-rebalance" id="lastRebalance">-</span>
+                    </div>
+                </div>
+
+                <div class="hybrid-performance-card">
+                    <h3>策略表现</h3>
+                    <div class="performance-metrics">
+                        <div class="metric">
+                            <span class="label">总收益率</span>
+                            <span class="value" id="hybridTotalReturn">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">最大回撤</span>
+                            <span class="value" id="hybridMaxDrawdown">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">夏普指数</span>
+                            <span class="value" id="hybridSharpeRatio">-</span>
+                        </div>
+                        <div class="metric">
+                            <span class="label">胜率</span>
+                            <span class="value" id="hybridWinRate">-</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hybrid-decisions">
+                    <h3>最新决策</h3>
+                    <div class="decisions-container" id="hybridDecisions">
+                        <div style="text-align: center; padding: 20px; color: #94a3b8;">
+                            暂无决策数据
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hybrid-controls">
+                    <button class="control-btn" onclick="pauseHybridStrategy()" id="pauseBtn">
+                        ⏸️ 暂停策略
+                    </button>
+                    <button class="control-btn" onclick="resumeHybridStrategy()" id="resumeBtn" style="display: none;">
+                        ▶️ 恢复策略
+                    </button>
+                    <button class="control-btn info" onclick="showHybridDetails()">
+                        📊 详细信息
+                    </button>
+                </div>
+            </div>
+        </section>
     </div>
 
     <!-- 配置弹窗 -->
@@ -240,6 +354,89 @@
                             <option value="claude">Claude (Anthropic)</option>
                         </select>
                     </div>
+
+                    <div id="hybridConfig" class="config-panel">
+                        <h3>🚀 混合策略配置</h3>
+
+                        <div class="form-group">
+                            <label>总资金 (USDT)</label>
+                            <input type="number" id="totalCapital" placeholder="10000" value="10000" min="1000" step="1000">
+                        </div>
+
+                        <div class="form-group">
+                            <label>资金分配</label>
+                            <div class="allocation-container">
+                                <div class="allocation-item">
+                                    <label>DeepSeek 稳健策略</label>
+                                    <input type="range" id="deepseekRatio" min="0.3" max="0.8" step="0.05" value="0.6">
+                                    <span id="deepseekRatioDisplay">60%</span>
+                                </div>
+                                <div class="allocation-item">
+                                    <label>Qwen3 Max 集中策略</label>
+                                    <input type="range" id="qwen3Ratio" min="0.2" max="0.7" step="0.05" value="0.4">
+                                    <span id="qwen3RatioDisplay">40%</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>自动再平衡</label>
+                            <div class="rebalance-config">
+                                <input type="checkbox" id="enableRebalance" checked>
+                                <span>每</span>
+                                <input type="number" id="rebalanceHours" value="24" min="1" max="168" style="width: 80px;">
+                                <span>小时</span>
+                            </div>
+                        </div>
+
+                        <h4>DeepSeek 策略配置</h4>
+                        <div class="form-group">
+                            <label>杠杆倍数</label>
+                            <input type="number" id="deepseekLeverage" value="10" min="3" max="20" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>每次交易金额 (USDT)</label>
+                            <input type="number" id="deepseekAmount" value="300" min="100" max="1000" step="50">
+                        </div>
+                        <div class="form-group">
+                            <label>交易币种</label>
+                            <div class="symbols-container">
+                                <label><input type="checkbox" id="btc" checked> BTC/USDT</label>
+                                <label><input type="checkbox" id="eth" checked> ETH/USDT</label>
+                                <label><input type="checkbox" id="sol" checked> SOL/USDT</label>
+                                <label><input type="checkbox" id="doge" checked> DOGE/USDT</label>
+                            </div>
+                        </div>
+
+                        <h4>Qwen3 Max 策略配置</h4>
+                        <div class="form-group">
+                            <label>专注标的</label>
+                            <select id="qwen3FocusSymbol">
+                                <option value="BTC/USDT">BTC/USDT (推荐)</option>
+                                <option value="ETH/USDT">ETH/USDT</option>
+                                <option value="SOL/USDT">SOL/USDT</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>杠杆倍数</label>
+                            <input type="number" id="qwen3Leverage" value="20" min="5" max="30" step="1">
+                        </div>
+                        <div class="form-group">
+                            <label>每次交易金额 (USDT)</label>
+                            <input type="number" id="qwen3Amount" value="400" min="100" max="1000" step="50">
+                        </div>
+
+                        <div class="form-group">
+                            <label>关键支撑位 (USDT)</label>
+                            <input type="number" id="qwen3Invalidation" value="105000" min="50000" max="200000" step="5000">
+                        </div>
+
+                        <div class="form-actions">
+                            <button class="action-btn success" onclick="saveHybridConfig()">💾 保存配置</button>
+                            <button class="action-btn" onclick="resetHybridConfig()">🔄 重置默认</button>
+                        </div>
+                    </div>
+                </div>
 
                     <h4>中转 API 配置</h4>
                     <div class="form-group">
