@@ -232,20 +232,43 @@ def get_current_position(symbol):
 
         result_positions = []
 
-        for pos in all_positions:
-            # 匹配符号
-            pos_symbol = pos['symbol']
+        # 提取目标symbol的基础部分用于匹配
+        # 例如: BNB/USDT -> BNB
+        target_base = symbol.replace('/USDT', '').replace('/USDC', '').replace('-', '').replace(':', '').strip()
 
-            # OKX格式: BNB/USDT:USDT 或 BTC/USDT:USDT
+        for pos in all_positions:
+            # 匹配符号 - 添加健壮性检查
+            pos_symbol = pos.get('symbol')
+
+            # 跳过空值
+            if not pos_symbol:
+                print(f"[DEBUG] 跳过空symbol的持仓")
+                continue
+
+            # OKX格式: BNB/USDT:USDT 或 BTC/USDT:USDT 或 BNB-USDT-SWAP
             # Binance格式: BNBUSDT 或 BTCUSDT
             # 我们的symbol格式: BNB/USDT 或 BTC/USDT
 
-            # 提取基础交易对部分 (去掉:USDT后缀)
+            # 提取持仓的基础货币部分
+            # 1. 先去掉:USDT后缀
             base_symbol = pos_symbol.split(':')[0]  # BNB/USDT:USDT -> BNB/USDT
+            # 2. 提取基础货币名称
+            pos_base = base_symbol.replace('/USDT', '').replace('/USDC', '').replace('-SWAP', '').replace('-', '').strip()
 
-            # 检查是否匹配
-            if base_symbol != symbol:
+            print(f"[DEBUG] 匹配检查: pos_symbol={pos_symbol}, base_symbol={base_symbol}, pos_base={pos_base}, target_base={target_base}")
+
+            # 使用更灵活的匹配逻辑
+            is_match = (
+                base_symbol == symbol or  # 精确匹配: BNB/USDT == BNB/USDT
+                pos_base == target_base or  # 基础货币匹配: BNB == BNB
+                pos_symbol == symbol or  # 完整匹配: BNB/USDT:USDT == BNB/USDT (不太可能但保留)
+                (symbol in pos_symbol)  # 包含匹配: BNB/USDT in BNB/USDT:USDT
+            )
+
+            if not is_match:
                 continue
+
+            print(f"[DEBUG] ✓ {symbol} 匹配到持仓: {pos_symbol}")
 
             # 获取持仓数量 - 支持多种字段格式
             position_amt = 0
@@ -253,19 +276,25 @@ def get_current_position(symbol):
 
             # 优先使用 positionAmt（Binance和部分OKX返回）
             if 'positionAmt' in info:
-                position_amt = float(info['positionAmt'])
-                print(f"[DEBUG] {symbol} 使用 positionAmt: {position_amt}")
+                try:
+                    position_amt = float(info['positionAmt'] or 0)
+                    print(f"[DEBUG] {symbol} 使用 positionAmt: {position_amt}")
+                except (ValueError, TypeError) as e:
+                    print(f"[WARN] {symbol} positionAmt转换失败: {e}, 值={info.get('positionAmt')}")
             elif 'contracts' in pos:
                 # 使用 contracts 字段，根据 side 确定方向
-                contracts = float(pos['contracts'])
-                if contracts > 0:
-                    # OKX使用info.posSide区分多空
-                    pos_side = info.get('posSide', '')
-                    if pos_side == 'short':
-                        position_amt = -contracts
-                    else:
-                        position_amt = contracts
-                print(f"[DEBUG] {symbol} 使用 contracts: {contracts}, posSide: {pos_side}, position_amt: {position_amt}")
+                try:
+                    contracts = float(pos['contracts'] or 0)
+                    if contracts > 0:
+                        # OKX使用info.posSide区分多空
+                        pos_side = info.get('posSide', '')
+                        if pos_side == 'short':
+                            position_amt = -contracts
+                        else:
+                            position_amt = contracts
+                    print(f"[DEBUG] {symbol} 使用 contracts: {contracts}, posSide: {pos_side}, position_amt: {position_amt}")
+                except (ValueError, TypeError) as e:
+                    print(f"[WARN] {symbol} contracts转换失败: {e}, 值={pos.get('contracts')}")
 
             print(f"[DEBUG] {symbol} 最终持仓量: {position_amt}")
 
@@ -314,20 +343,21 @@ def get_current_position(symbol):
                     print(f"  计算方式: 使用原始margin = {calculated_margin}")
 
                 position_data = {
-                    'symbol': symbol,
+                    'symbol': symbol,  # 使用标准化的symbol格式，确保前端匹配
                     'side': side,
                     'size': abs(position_amt),  # 使用持仓数量的绝对值
-                    'entry_price': float(pos.get('entryPrice', 0)),
-                    'unrealized_pnl': float(pos.get('unrealizedPnl', 0)),
+                    'entry_price': safe_float(pos.get('entryPrice', 0)),
+                    'unrealized_pnl': safe_float(pos.get('unrealizedPnl', 0)),
                     'leverage': leverage,
                     'margin': calculated_margin,  # 计算后的USDT保证金
-                    'liquidation_price': float(pos.get('liquidationPrice', 0) or 0),  # 强平价
-                    'margin_ratio': float(info.get('mgnRatio', 0)),  # 保证金率
+                    'liquidation_price': safe_float(pos.get('liquidationPrice', 0)),  # 强平价
+                    'margin_ratio': safe_float(info.get('mgnRatio', 0)),  # 保证金率
                     'notional': notional_usd,  # USDT计价的名义价值
                     'position_amt': position_amt,  # 原始持仓量（带符号）
+                    'raw_symbol': pos_symbol,  # 保存原始symbol用于调试
                 }
                 result_positions.append(position_data)
-                print(f"[DEBUG] {symbol} 添加持仓: {side} {abs(position_amt)} @ ${float(pos.get('entryPrice', 0))}")
+                print(f"[DEBUG] {symbol} 添加持仓: {side} {abs(position_amt)} @ ${safe_float(pos.get('entryPrice', 0))}")
 
         # 如果有多个持仓,返回列表;如果只有一个,返回单个对象;如果没有,返回None
         if len(result_positions) == 0:

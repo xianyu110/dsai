@@ -65,26 +65,61 @@ window.addEventListener('DOMContentLoaded', function() {
 async function fetchStatus() {
     try {
         const response = await fetch('/api/status');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
 
         if (data.success) {
-            document.getElementById('balance').textContent = data.balance.toFixed(2);
+            // 安全更新余额显示
+            const balanceEl = document.getElementById('balance');
+            if (balanceEl) balanceEl.textContent = data.balance.toFixed(2);
 
             const pnlElement = document.getElementById('totalPnl');
-            pnlElement.textContent = data.total_pnl.toFixed(2);
-            pnlElement.className = 'pnl ' + (data.total_pnl >= 0 ? 'positive' : 'negative');
+            if (pnlElement) {
+                pnlElement.textContent = data.total_pnl.toFixed(2);
+                pnlElement.className = 'pnl ' + (data.total_pnl >= 0 ? 'positive' : 'negative');
+            }
 
-            document.getElementById('updateTime').textContent = new Date().toLocaleTimeString();
+            const timeEl = document.getElementById('updateTime');
+            if (timeEl) timeEl.textContent = new Date().toLocaleTimeString();
 
             // 更新自动交易状态
             updateAutoTradeStatus(data.auto_trade);
 
             // 更新持仓表格和概览
-            updateOrdersTable(data.positions);
-            updatePositions(data.positions);
+            if (data.positions) {
+                updateOrdersTable(data.positions);
+                updatePositions(data.positions);
+            }
+        } else {
+            console.warn('API返回失败:', data.error || '未知错误');
         }
     } catch (error) {
         console.error('获取状态失败:', error);
+        // 可选：显示用户友好的错误消息
+        showConnectionError();
+    }
+}
+
+// 显示连接错误信息
+function showConnectionError() {
+    const statusEl = document.querySelector('.connection-status');
+    if (statusEl) {
+        statusEl.innerHTML = '<span class="pulse error"></span>连接断开';
+        statusEl.classList.add('error');
+    }
+
+    // 清除可能显示的数据
+    const balanceEl = document.getElementById('balance');
+    if (balanceEl) balanceEl.textContent = '--';
+
+    const pnlEl = document.getElementById('totalPnl');
+    if (pnlEl) {
+        pnlEl.textContent = '--';
+        pnlEl.className = 'pnl';
     }
 }
 
@@ -92,6 +127,12 @@ function updateAutoTradeStatus(enabled) {
     const statusBadge = document.getElementById('autoTradeStatus');
     const toggleBtn = document.getElementById('autoTradeToggle');
     const toggleText = document.getElementById('autoTradeToggleText');
+
+    // 检查DOM元素是否存在
+    if (!statusBadge || !toggleBtn || !toggleText) {
+        console.warn('自动交易状态显示元素未找到');
+        return;
+    }
 
     if (enabled) {
         statusBadge.textContent = '运行中';
@@ -152,10 +193,17 @@ async function toggleAutoTrade() {
 async function fetchSpotBalance() {
     try {
         const response = await fetch('/api/spot_balance');
+
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
         const data = await response.json();
 
         if (data.success) {
             updateSpotBalances(data.balances);
+        } else {
+            console.warn('获取现货余额失败:', data.error || '未知错误');
         }
     } catch (error) {
         console.error('获取现货余额失败:', error);
@@ -315,28 +363,44 @@ function updatePositions(positions) {
         return;
     }
 
-    // 构建持仓映射
+    // 构建持仓映射 - 添加健壮性检查
     const positionMap = {};
     positions.forEach(pos => {
+        // 确保symbol和side都存在且有效
+        if (!pos.symbol || !pos.side) {
+            console.warn('[WARN] 跳过无效持仓数据:', pos);
+            return;
+        }
         const key = `${pos.symbol}-${pos.side}`;
         positionMap[key] = pos;
+        console.log(`[DEBUG] 持仓映射: ${key}`, pos);
     });
+
+    console.log('[DEBUG] 当前持仓映射:', Object.keys(positionMap));
 
     // 删除不存在的持仓卡片
     Array.from(grid.children).forEach(card => {
         const key = card.dataset.positionKey;
         if (key && !positionMap[key]) {
+            console.log(`[DEBUG] 删除不存在的持仓卡片: ${key}`);
             card.remove();
         }
     });
 
     // 更新或创建持仓卡片
     positions.forEach(pos => {
+        // 再次确保symbol和side有效
+        if (!pos.symbol || !pos.side) {
+            console.warn('[WARN] 跳过创建/更新无效持仓:', pos);
+            return;
+        }
+
         const key = `${pos.symbol}-${pos.side}`;
         let card = grid.querySelector(`[data-position-key="${key}"]`);
 
         if (!card) {
             // 创建新卡片
+            console.log(`[DEBUG] 创建新持仓卡片: ${key}`);
             card = document.createElement('div');
             card.className = 'card';
             card.dataset.positionKey = key;
@@ -353,33 +417,41 @@ function updatePositions(positions) {
                 </div>
             `;
             grid.appendChild(card);
+        } else {
+            console.log(`[DEBUG] 更新现有持仓卡片: ${key}`);
         }
 
-        // 更新数据
+        // 更新数据 - 添加空值检查
         const sizeElement = card.querySelector('.size-value');
-        const newSize = pos.size.toFixed(6);
-        if (sizeElement.textContent !== newSize) {
-            sizeElement.textContent = newSize;
-            sizeElement.classList.add('value-changed');
-            setTimeout(() => sizeElement.classList.remove('value-changed'), 500);
+        if (sizeElement && pos.size !== undefined && pos.size !== null) {
+            const newSize = pos.size.toFixed(6);
+            if (sizeElement.textContent !== newSize) {
+                sizeElement.textContent = newSize;
+                sizeElement.classList.add('value-changed');
+                setTimeout(() => sizeElement.classList.remove('value-changed'), 500);
+            }
         }
 
         const entryElement = card.querySelector('.entry-value');
-        const newEntry = `$${pos.entry_price.toFixed(2)}`;
-        if (entryElement.textContent !== newEntry) {
-            entryElement.textContent = newEntry;
-            entryElement.classList.add('value-changed');
-            setTimeout(() => entryElement.classList.remove('value-changed'), 500);
+        if (entryElement && pos.entry_price !== undefined && pos.entry_price !== null) {
+            const newEntry = `$${pos.entry_price.toFixed(2)}`;
+            if (entryElement.textContent !== newEntry) {
+                entryElement.textContent = newEntry;
+                entryElement.classList.add('value-changed');
+                setTimeout(() => entryElement.classList.remove('value-changed'), 500);
+            }
         }
 
         const pnlElement = card.querySelector('.pnl-value');
-        const pnlClass = pos.unrealized_pnl >= 0 ? 'positive' : 'negative';
-        const newPnl = `${pos.unrealized_pnl.toFixed(2)} USDT`;
-        if (pnlElement.textContent !== newPnl) {
-            pnlElement.className = `pnl ${pnlClass}`;
-            pnlElement.textContent = newPnl;
-            pnlElement.classList.add('value-changed');
-            setTimeout(() => pnlElement.classList.remove('value-changed'), 500);
+        if (pnlElement && pos.unrealized_pnl !== undefined && pos.unrealized_pnl !== null) {
+            const pnlClass = pos.unrealized_pnl >= 0 ? 'positive' : 'negative';
+            const newPnl = `${pos.unrealized_pnl.toFixed(2)} USDT`;
+            if (pnlElement.textContent !== newPnl) {
+                pnlElement.className = `pnl ${pnlClass}`;
+                pnlElement.textContent = newPnl;
+                pnlElement.classList.add('value-changed');
+                setTimeout(() => pnlElement.classList.remove('value-changed'), 500);
+            }
         }
     });
 }
@@ -668,9 +740,29 @@ async function updateOrdersTable(positions) {
         return;
     }
 
+    // 过滤掉无效持仓数据
+    const validPositions = positions.filter(pos => {
+        if (!pos.symbol || !pos.side) {
+            console.warn('[WARN] updateOrdersTable: 跳过无效持仓', pos);
+            return false;
+        }
+        return true;
+    });
+
+    if (validPositions.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="13" style="text-align: center; padding: 40px; color: #94a3b8;">
+                    暂无有效持仓数据
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
     // 获取实时行情数据
     const marketData = {};
-    for (const pos of positions) {
+    for (const pos of validPositions) {
         try {
             const response = await fetch(`/api/market/${pos.symbol}`);
             const result = await response.json();
@@ -682,7 +774,7 @@ async function updateOrdersTable(positions) {
         }
     }
 
-    tbody.innerHTML = positions.map((pos, index) => {
+    tbody.innerHTML = validPositions.map((pos, index) => {
         const isProfit = pos.unrealized_pnl >= 0;
         const profitClass = isProfit ? 'profit' : 'loss';
         const directionClass = pos.side === 'long' ? 'long' : 'short';
