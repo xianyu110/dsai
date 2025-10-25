@@ -52,6 +52,10 @@
             cursor: pointer;
             font-size: 14px;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
         .btn-start {
             background: #4CAF50;
             color: white;
@@ -119,6 +123,9 @@
                 const statusClass = strategy.status === 'running' ? 'status-running' : 'status-stopped';
                 const statusText = strategy.status === 'running' ? '运行中' : '已停止';
 
+                const startDisabled = strategy.status === 'running' ? 'disabled' : '';
+                const stopDisabled = strategy.status === 'stopped' ? 'disabled' : '';
+
                 card.innerHTML = `
                     <div class="strategy-header">
                         <div class="strategy-name">${strategy.name}</div>
@@ -130,12 +137,12 @@
                     <div>
                         <button class="btn-start" onclick="startStrategy('${strategy.id}')"
                                 id="start-${strategy.id}"
-                                ${strategy.status === 'running' ? 'disabled' : ''}>
+                                ${startDisabled}>
                             ▶️ 启动
                         </button>
                         <button class="btn-stop" onclick="stopStrategy('${strategy.id}')"
                                 id="stop-${strategy.id}"
-                                ${strategy.status === 'stopped' ? 'disabled' : ''}>
+                                ${stopDisabled}>
                             ⏹️ 停止
                         </button>
                         <button class="btn-logs" onclick="toggleLogs('${strategy.id}')">
@@ -151,6 +158,10 @@
 
         // 启动策略
         async function startStrategy(strategyId) {
+            // 禁用启动按钮防止重复点击
+            const startBtn = document.getElementById(`start-${strategyId}`);
+            startBtn.disabled = true;
+
             try {
                 const response = await fetch(`/api/strategy/${strategyId}/start`, {
                     method: 'POST'
@@ -159,12 +170,16 @@
 
                 if (data.success) {
                     alert(`✅ ${data.message}`);
-                    loadStrategies();  // 刷新列表
+                    // 立即更新状态
+                    await loadStrategies();
                 } else {
                     alert(`❌ ${data.error}`);
+                    // 失败时重新启用按钮
+                    startBtn.disabled = false;
                 }
             } catch (error) {
                 alert(`❌ 请求失败: ${error.message}`);
+                startBtn.disabled = false;
             }
         }
 
@@ -174,6 +189,10 @@
                 return;
             }
 
+            // 禁用停止按钮防止重复点击
+            const stopBtn = document.getElementById(`stop-${strategyId}`);
+            stopBtn.disabled = true;
+
             try {
                 const response = await fetch(`/api/strategy/${strategyId}/stop`, {
                     method: 'POST'
@@ -182,12 +201,16 @@
 
                 if (data.success) {
                     alert(`✅ ${data.message}`);
-                    loadStrategies();  // 刷新列表
+                    // 立即更新状态
+                    await loadStrategies();
                 } else {
                     alert(`❌ ${data.error}`);
+                    // 失败时重新启用按钮
+                    stopBtn.disabled = false;
                 }
             } catch (error) {
                 alert(`❌ 请求失败: ${error.message}`);
+                stopBtn.disabled = false;
             }
         }
 
