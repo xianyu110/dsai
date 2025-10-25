@@ -75,7 +75,11 @@ if os.getenv('HTTP_PROXY'):
 
 if EXCHANGE_TYPE == 'okx':
     exchange = ccxt.okx({
-        'options': {'defaultType': 'swap'},  # 永续合约
+        'options': {
+            'defaultType': 'swap',  # 永续合约
+            'defaultSubType': 'swap',  # 明确指定子类型为swap
+            'fetchPositions': ['swap'],  # 只获取永续合约持仓
+        },
         'apiKey': os.getenv('OKX_API_KEY'),
         'secret': os.getenv('OKX_SECRET'),
         'password': os.getenv('OKX_PASSWORD'),
@@ -509,8 +513,28 @@ def get_ohlcv(symbol):
 def get_current_position(symbol):
     """获取指定币种的当前持仓 - 返回所有方向的持仓列表"""
     try:
-        # 获取所有持仓(不指定symbol以避免OKX的查询问题)
-        all_positions = exchange.fetch_positions()
+        # 获取所有持仓(使用try-catch处理OKX API的歧义问题)
+        if EXCHANGE_TYPE == 'okx':
+            try:
+                # 首先尝试使用默认方式获取持仓
+                all_positions = exchange.fetch_positions()
+            except Exception as api_error:
+                # 如果遇到歧义错误，尝试使用带类型参数的方式
+                if "disambiguate" in str(api_error):
+                    print(f"[DEBUG] OKX API歧义错误，尝试替代方法...")
+                    try:
+                        # 使用更简单的查询方式
+                        all_positions = exchange.fetch_positions(None, None, None, None)
+                    except:
+                        # 如果还是失败，尝试使用私有API
+                        print(f"[DEBUG] 使用OKX私有API获取持仓...")
+                        response = exchange.private_get_account_positions({'instType': 'SWAP'})
+                        all_positions = exchange.parse_positions(response, None, None)
+                else:
+                    raise api_error
+        else:
+            # Binance保持原逻辑
+            all_positions = exchange.fetch_positions()
 
         result_positions = []
 
@@ -717,7 +741,30 @@ def get_current_position(symbol):
             return result_positions  # 多个持仓
 
     except Exception as e:
+        error_msg = str(e)
         print(f"{symbol} 获取持仓失败: {e}")
+
+        # 对OKX API歧义错误进行特殊处理
+        if EXCHANGE_TYPE == 'okx' and "disambiguate" in error_msg:
+            print(f"[OKX] API歧义错误，尝试直接使用私有API...")
+            try:
+                # 直接使用OKX私有API获取持仓
+                response = exchange.private_get_account_positions({'instType': 'SWAP'})
+                all_positions = exchange.parse_positions(response, None, None)
+                print(f"[OKX] 私有API获取到 {len(all_positions)} 个持仓")
+
+                # 重新执行匹配逻辑（简化版）
+                target_base = symbol.replace('/USDT', '').replace('/USDC', '').replace('-', '').replace(':', '').strip()
+
+                for pos in all_positions:
+                    pos_symbol = pos.get('symbol', '')
+                    if pos_symbol and target_base.upper() in pos_symbol.upper():
+                        if float(pos.get('contracts', 0)) != 0:
+                            return pos  # 找到有效持仓
+                return None  # 没有找到持仓
+            except Exception as fallback_error:
+                print(f"[OKX] 私有API也失败: {fallback_error}")
+
         if 'BNB' in symbol:
             print(f"[BNB DEBUG] ❌ 异常导致返回None!")
         import traceback
