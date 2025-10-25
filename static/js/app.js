@@ -1335,9 +1335,9 @@ function populateStrategySelect() {
         select.appendChild(option);
     });
 
-    // 默认选择混合策略
-    select.value = 'hybrid';
-    updateStrategyInfo('hybrid');
+    // 默认选择DeepSeek策略
+    select.value = 'deepseek';
+    updateStrategyInfo('deepseek');
 
     // 添加选择变化监听器
     select.onchange = function() {
