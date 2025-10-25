@@ -47,6 +47,9 @@ services:
       - HTTP_PROXY=${HTTP_PROXY:-}
       - HTTPS_PROXY=${HTTPS_PROXY:-}
 
+      # Python环境配置
+      - PYTHONUNBUFFERED=1
+
     volumes:
       # 持久化日志和数据
       - ./logs:/app/logs
@@ -56,8 +59,8 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1.0'
-          memory: 512M
+          cpus: '2.0'
+          memory: 1G
         reservations:
           cpus: '0.5'
           memory: 256M

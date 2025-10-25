@@ -43,6 +43,10 @@ RUN python -m pip install --upgrade --no-cache-dir pip setuptools wheel --progre
 # 复制项目文件
 COPY . .
 
+# 复制启动脚本并设置权限
+COPY start.sh .
+RUN chmod +x start.sh
+
 # 创建非root用户运行应用（安全最佳实践）
 RUN useradd -m -u 1000 trader && \
     chown -R trader:trader /app
@@ -56,5 +60,5 @@ EXPOSE 8888
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8888/api/status || exit 1
 
-# 启动应用
-CMD ["python", "web_ui.py"]
+# 使用启动脚本启动所有服务（Web界面 + 自动交易策略）
+CMD ["./start.sh"]
